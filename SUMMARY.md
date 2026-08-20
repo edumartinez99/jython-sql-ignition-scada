@@ -1,6 +1,6 @@
 # Table of contents
 
-* [Setup inicial alumnos](README.md)
+* [Setup inicial alumnos - LOCAL](README.md)
 * [Sesión 1: Arquitectura de Scripting, Jython y Fundamentos SCADA](sesion-1-arquitectura-de-scripting-jython-y-fundamentos-scada.md)
 * [Sesión 2: Lógica Industrial Encapsulada y Estructuras de Datos (Datasets y PyDataSets)](sesion-2-logica-industrial-encapsulada-y-estructuras-de-datos-datasets-y-pydatasets.md)
 * [Sesión 3: Modularización en Project Library, Pruebas Rápidas y Depuración](sesion-3-modularizacion-en-project-library-pruebas-rapidas-y-depuracion.md)
