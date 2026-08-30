@@ -169,7 +169,7 @@ Le damos a añadir conexión arriba a la izquierda<br>
 <figure><img src=".gitbook/assets/image (35).png" alt=""><figcaption></figcaption></figure>
 
 * **Database:** sandbox\_db
-* **Connect URL:** `jdbc:postgresql://postgres:5432/sandbox_db`
+* **Connect URL:** `jdbc:postgresql://localhost:5432/sandbox_db`
 * **Username:** `ignition_user`
 * **Password:** `DBPassword123!`
 
