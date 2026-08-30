@@ -146,6 +146,8 @@ Click en Get Designer. Descargamos y ejecutamos el .exe
 
 Configuramos el Designer con Add Designer
 
+* Inicia sesión con el usuario `admin` y contraseña `AdminMasterPass123!`.
+
 <figure><img src=".gitbook/assets/image (28).png" alt=""><figcaption></figcaption></figure>
 
 Seleccionamos el Gateway de localhost
