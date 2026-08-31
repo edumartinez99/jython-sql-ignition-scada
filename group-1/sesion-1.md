@@ -35,8 +35,8 @@ description: Arquitectura de Scripting, Jython en la JVM y Fundamentos Industria
 
 * Recorrido de una variable operativa: Tag OPC-UA / Registro SQL -> Motor de procesamiento -> Vista de usuario.
 * Identificación de puntos de inserción de scripts: Bindings, Script Transforms, Eventos y Tareas de Gateway.
-* Criterios técnicos de legibilidad, mantenibilidad y rendimiento en código de planta.
 * Separación de responsabilidades: cuándo procesar en base de datos, en motor SCADA o en interfaz.
+* Criterios técnicos de legibilidad, mantenibilidad y rendimiento en código de planta.
 
 ```mermaid
 flowchart LR
