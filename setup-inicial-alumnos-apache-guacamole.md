@@ -1,6 +1,6 @@
 # Setup inicial alumnos - APACHE GUACAMOLE
 
-Accedemos al servidor de Apache Guacamole: [http://35.204.54.113:8080/](http://35.204.54.113:8080/)
+Accedemos al servidor de Apache Guacamole: [http](http://35.204.54.113:8080/)s://lab.eduardo-martinez.es
 
 * Usuario: `andrea`
 * Password: `password01`
