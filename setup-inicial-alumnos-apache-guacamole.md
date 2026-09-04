@@ -62,7 +62,7 @@ Ejecutamos:
 
 
 
-Cerramos termina, abrimos la nueva carpeta y ejecutamos el Designer:
+Cerramos terminal, abrimos la nueva carpeta y ejecutamos el Designer:
 
 <figure><img src=".gitbook/assets/image (40).png" alt=""><figcaption></figcaption></figure>
 
@@ -82,3 +82,42 @@ Seleccionamos `prj-alumno01`
 Comprobamos el acceso a la DB con Tools > Database Query Browser:
 
 <figure><img src=".gitbook/assets/image (42).png" alt=""><figcaption></figcaption></figure>
+
+Accedemos a [https://dbeaver.io/](https://dbeaver.io/)
+
+Descargamos para linux
+
+<figure><img src=".gitbook/assets/image (54).png" alt=""><figcaption></figcaption></figure>
+
+Abrimos el explorador de carpetas en el menú horizontal de la parte inferior.
+
+Nos vamos a Downloads/
+
+Hacemos click derecho y le damos a Open in Terminal here:
+
+<figure><img src=".gitbook/assets/image (55).png" alt=""><figcaption></figcaption></figure>
+
+Ejecutamos:
+
+* `cd Downloads/`
+* `tar -xvf dbeaver-ce-26.2.0-linux-x86_64.tar.gz`
+
+Y abrimos dbeaver.
+
+* Elegimos la configuración preferida
+* Le damos a Nueva conexión arriba a la izquierda
+
+<figure><img src=".gitbook/assets/image (56).png" alt=""><figcaption></figcaption></figure>
+
+* Elegimos Postgres y añadimos la configuración
+  * Host: `postgres-maker-db`
+  * Database:   `sandbox_db_01`
+  * Username:   `ignition_user`
+  * Password: `DBPassword123!`
+
+<figure><img src=".gitbook/assets/image (59).png" alt=""><figcaption></figcaption></figure>
+
+* Test Connection y descargar drivers
+* Revisamos que haya datos
+
+<figure><img src=".gitbook/assets/image (58).png" alt=""><figcaption></figcaption></figure>
