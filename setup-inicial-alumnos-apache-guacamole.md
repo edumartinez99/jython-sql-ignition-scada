@@ -2,8 +2,15 @@
 
 Accedemos al servidor de Apache Guacamole: [https://lab.eduardo-martinez.es/](https://lab.eduardo-martinez.es/)
 
-* Usuario: `andrea`
-* Password: `password01`
+* Usuario: `alumno01`
+* Password: `PasswordAlumno01!`
+
+La primera vez puede salir este Login:
+
+<figure><img src=".gitbook/assets/image (43).png" alt=""><figcaption></figcaption></figure>
+
+* Usuario: `abc`
+* Password: `abc`
 
 Se abre el escritorio.
 
@@ -17,28 +24,61 @@ Insertamos la URL del Gateway: [http://35.204.54.113:8088/](http://35.204.54.113
 
 Iniciamos sesión:
 
-* Usuario: `andrea`
-* Password: `password01`
+* Usuario: `alumno01`
+* Password: `AlumnoPass01!`
 
-<figure><img src=".gitbook/assets/image (39).png" alt=""><figcaption></figcaption></figure>
+
+
+Pinchamos en Get Designer
+
+<figure><img src=".gitbook/assets/image (46).png" alt=""><figcaption></figcaption></figure>
+
+\
+\
+Pinchamos en Download for Linux:
+
+<figure><img src=".gitbook/assets/image (47).png" alt=""><figcaption></figcaption></figure>
+
+
 
 Abrimos el explorador de carpetas en el menú horizontal de la parte inferior.
 
-Nos vamos a Downloads/designerlauncher/
+Nos vamos a Downloads/
 
-Ejecutamos el Designer:
+<figure><img src=".gitbook/assets/image (48).png" alt=""><figcaption></figcaption></figure>
+
+
+
+Hacemos click derecho y le damos a Open in Terminal here:<br>
+
+<figure><img src=".gitbook/assets/image (49).png" alt=""><figcaption></figcaption></figure>
+
+Ejecutamos:
+
+* `cd Downloads/`
+* `tar -xvf designerlauncher.tar.gz`
+
+<figure><img src=".gitbook/assets/image (50).png" alt=""><figcaption></figcaption></figure>
+
+
+
+Cerramos termina, abrimos la nueva carpeta y ejecutamos el Designer:
 
 <figure><img src=".gitbook/assets/image (40).png" alt=""><figcaption></figcaption></figure>
 
-Abrimos el Designer que ya hay añadido e iniciamos sesión:
+Abrimos el Designer que viene por defecto e iniciamos sesión:
 
-* Usuario: `andrea`
-* Password: `password01`&#x20;
+<figure><img src=".gitbook/assets/image (51).png" alt=""><figcaption></figcaption></figure>
+
+* Usuario: `alumno01`&#x20;
+* Password: `AlumnoPass01!`
 
 <figure><img src=".gitbook/assets/image (41).png" alt=""><figcaption></figcaption></figure>
 
-Comprobamos el acceso a la DB con Tools > Database Query Browser:
+Seleccionamos `prj-alumno01`
 
-<br>
+<figure><img src=".gitbook/assets/image (52).png" alt=""><figcaption></figcaption></figure>
+
+Comprobamos el acceso a la DB con Tools > Database Query Browser:
 
 <figure><img src=".gitbook/assets/image (42).png" alt=""><figcaption></figcaption></figure>
