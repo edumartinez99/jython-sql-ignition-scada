@@ -4,6 +4,53 @@ description: Arquitectura de Scripting, Jython en la JVM y Fundamentos Industria
 
 # Sesión 1
 
+### Tema 0: Contexto Industrial: El Ecosistema SCADA, Ignition y Jython
+
+#### Objetivos
+
+* Contextualizar a Ignition dentro de la pirámide de automatización (Modelo Purdue / ISA-95).
+* Comprender la arquitectura centralizada del Gateway sobre la Máquina Virtual de Java (JVM).
+* Asimilar el rol de Jython 2.7 como motor de scripting y sus implicaciones operativas.
+
+#### Contenidos
+
+* **El SCADA en la pirámide ISA-95:** rol de Ignition como hub transversal de convergencia IT/OT entre campo (N1/PLCs), operaciones (N3/MES) y gestión (N4/ERP).
+* **Arquitectura interna del Gateway:** entorno centralizado sobre JVM, Tag Engine en memoria RAM y gestión multihilo (_thread pools_ para OPC, JDBC y UI).
+* **Fundamentos de Jython:** ejecución sobre Java bytecode, integración nativa con APIs de Java e Ignition, y particularidades del runtime 2.7.
+
+```mermaid
+flowchart TD
+    subgraph Nivel4 [Nivel 4: ERP / Gestión Empresarial]
+        ERP[ERP: SAP, Oracle, Microsoft Dynamics]
+    end
+
+    subgraph Nivel3 [Nivel 3: MES / MOM / Operaciones]
+        MES[MES: OEE, Trazabilidad, Recetas, Calidad]
+    end
+
+    subgraph Nivel2 [Nivel 2: SCADA / Ignition Gateway]
+        GW[Ignition Gateway Core: Java JVM]
+        TagEng[Tag Engine + Alarming]
+        JythonEng[Motor Scripting: Jython 2.7]
+        DBBridge[SQL Bridge + JDBC]
+        PerspEng[Perspective Web Engine]
+    end
+
+    subgraph Nivel1 [Nivel 1: Control de Campo / PLC]
+        PLC1[PLCs Siemens / Allen-Bradley / Omron]
+        FieldSensors[Sensores / Variadores / Servos]
+    end
+
+    ERP <-->|REST API / SQL| GW
+    MES <-->|Jython / SQL / Webhooks| GW
+    GW <-->|OPC-UA / MQTT Sparkplug B / Modbus| PLC1
+    PLC1 <--> FieldSensors
+```
+
+#### Resultado esperado
+
+Comprensión del flujo global del dato entre PLC, Gateway JVM, bases de datos y visualización, asimilando el papel de Jython como orquestador del ecosistema.
+
 ### 1. Presentación del Curso y Validación del Entorno
 
 #### Objetivos
