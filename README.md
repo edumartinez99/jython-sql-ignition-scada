@@ -1,6 +1,5 @@
 ---
 description: Setup y Validación del Entorno de Trabajo LOCAL
-hidden: true
 ---
 
 # Setup inicial alumnos - LOCAL
