@@ -1,7 +1,8 @@
 # Table of contents
 
 * [Setup inicial alumnos - LOCAL](README.md)
-* [Setup inicial alumnos - APACHE GUACAMOLE](setup-inicial-alumnos-apache-guacamole.md)
+* [alumno01 - Setup inicial alumnos - APACHE GUACAMOLE](alumno01-setup-inicial-alumnos-apache-guacamole.md)
+* [alumno02 - Setup inicial alumnos - APACHE GUACAMOLE](alumno02-setup-inicial-alumnos-apache-guacamole.md)
 
 ## Group 1
 
