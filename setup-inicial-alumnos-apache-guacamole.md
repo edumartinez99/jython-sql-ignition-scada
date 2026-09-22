@@ -66,9 +66,11 @@ Cerramos terminal, abrimos la nueva carpeta y ejecutamos el Designer:
 
 <figure><img src=".gitbook/assets/image (40).png" alt=""><figcaption></figcaption></figure>
 
-Abrimos el Designer que viene por defecto e iniciamos sesión:
+Abrimos el Designer, le damos a Add Designer Manual, insertamos la URL del Gateway insertamos la URL del Gateway [http://35.204.54.113:8088/](http://35.204.54.113:8088/) e iniciamos sesión:
 
 <figure><img src=".gitbook/assets/image (51).png" alt=""><figcaption></figcaption></figure>
+
+<figure><img src=".gitbook/assets/image (60).png" alt=""><figcaption></figcaption></figure>
 
 * Usuario: `alumno01`&#x20;
 * Password: `AlumnoPass01!`
