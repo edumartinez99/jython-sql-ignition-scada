@@ -3,10 +3,10 @@
 * [Setup inicial alumnos - LOCAL](README.md)
 * [alumno01 - Setup inicial alumnos - APACHE GUACAMOLE](alumno01-setup-inicial-alumnos-apache-guacamole.md)
 * [alumno02 - Setup inicial alumnos - APACHE GUACAMOLE](alumno02-setup-inicial-alumnos-apache-guacamole.md)
+* [Sesión 1](sesion-1.md)
 
 ## Group 1
 
-* [Sesión 1](group-1/sesion-1.md)
 * [Sesión 2](group-1/sesion-2.md)
 * [Sesión 3](group-1/sesion-3.md)
 * [Sesión 4](group-1/sesion-4.md)
