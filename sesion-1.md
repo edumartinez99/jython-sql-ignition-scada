@@ -278,22 +278,4 @@ flowchart TD
 
 * Comprobación del nivel de comprensión del grupo sobre los fundamentos del motor de scripting y fijación de conceptos clave.
 
-***
-
-### 11. Feedback Individual y Cierre de la Sesión
-
-#### Objetivos
-
-* Revisar el estado individual de ejecución de los laboratorios en la consola de cada alumno.
-* Solventar errores sintácticos o de configuración encontrados durante la jornada.
-* Introducir el temario y requisitos de la Sesión 2.
-
-#### Contenidos
-
-* Rondas de comprobación de código en la Script Console de los participantes.
-* Resolución de dudas puntuales sobre manejo de nulos y conversión de estructuras.
-* Resumen de conexión con la Sesión 2: continuación de estructuras de datos complejas y diseño modular en `Project Library`.
-
-#### Resultado esperado
-
-* Cada alumno finaliza la sesión con sus tres laboratorios validados, su entorno operativo y claridad sobre la base técnica requerida para la siguiente jornada.
+###
