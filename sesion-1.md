@@ -4,6 +4,25 @@ description: Arquitectura de Scripting, Jython en la JVM y Fundamentos Industria
 
 # Sesión 1
 
+### Presentación del Curso y Validación del Entorno
+
+#### Objetivos
+
+* Exponer la metodología de trabajo, los criterios de diseño y las normas de seguridad del curso.
+* Verificar la conectividad de todos los alumnos al Designer, base de datos sandbox y herramientas de soporte.
+
+#### Contenidos
+
+* Metodología de desarrollo guiado y buenas prácticas en scripting industrial.
+* Directrices de seguridad en entornos de control: aislamiento del sandbox frente a redes de producción.
+* Comprobación de acceso a Ignition Designer y base de datos relacional de pruebas.
+
+#### Resultado esperado
+
+* Todos los participantes disponen de acceso verificado al Designer y a la base de datos de pruebas sin bloqueos de red o credenciales.
+
+***
+
 ### Tema 0: Contexto Industrial: El Ecosistema SCADA, Ignition y Jython
 
 #### Objetivos
@@ -50,23 +69,6 @@ flowchart TD
 #### Resultado esperado
 
 Comprensión del flujo global del dato entre PLC, Gateway JVM, bases de datos y visualización, asimilando el papel de Jython como orquestador del ecosistema.
-
-### 1. Presentación del Curso y Validación del Entorno
-
-#### Objetivos
-
-* Exponer la metodología de trabajo, los criterios de diseño y las normas de seguridad del curso.
-* Verificar la conectividad de todos los alumnos al Designer, base de datos sandbox y herramientas de soporte.
-
-#### Contenidos
-
-* Metodología de desarrollo guiado y buenas prácticas en scripting industrial.
-* Directrices de seguridad en entornos de control: aislamiento del sandbox frente a redes de producción.
-* Comprobación de acceso a Ignition Designer y base de datos relacional de pruebas.
-
-#### Resultado esperado
-
-* Todos los participantes disponen de acceso verificado al Designer y a la base de datos de pruebas sin bloqueos de red o credenciales.
 
 ***
 
