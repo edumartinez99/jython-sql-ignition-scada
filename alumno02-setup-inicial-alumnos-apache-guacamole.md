@@ -1,3 +1,7 @@
+---
+hidden: true
+---
+
 # alumno02 - Setup inicial alumnos - APACHE GUACAMOLE
 
 Accedemos al servidor de Apache Guacamole: [https://lab.eduardo-martinez.es/](https://lab.eduardo-martinez.es/)

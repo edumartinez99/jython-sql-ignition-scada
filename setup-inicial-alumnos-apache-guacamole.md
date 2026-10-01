@@ -1,4 +1,8 @@
-# alumno01 - Setup inicial alumnos - APACHE GUACAMOLE
+---
+description: Se describen los pasos para el alumno01.
+---
+
+# Setup inicial alumnos - APACHE GUACAMOLE
 
 Accedemos al servidor de Apache Guacamole: [https://lab.eduardo-martinez.es/](https://lab.eduardo-martinez.es/)
 
