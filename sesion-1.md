@@ -122,6 +122,98 @@ flowchart LR
 
 * Función validada en consola que recibe valor crudo y estado de calidad, devolviendo una estructura normalizada con valor en m/s, estado textual ('RUNNING', 'SLOW', 'STOPPED', 'OUT\_OF\_RANGE', 'SENSOR\_ERROR') y código de color hexadecimal.
 
+#### Paso a Paso para la Realización
+
+**Paso 1: Apertura de la Script Console**
+
+1. Abrir **Ignition Designer**.
+2. En el menú superior, seleccionar **Tools -> Script Console**.
+3. Asegurarse de que el área interactiva esté limpia.
+
+**Paso 2: Implementación de la Función de Normalización**
+
+Copiar y pegar el siguiente código en el panel superior de la Script Console:
+
+```python
+def normalize_conveyor_telemetry(raw_value, quality_code):
+    """
+    Valida y normaliza la telemetria de velocidad de una cinta transportadora.
+    
+    Args:
+        raw_value (float|int|None): Lectura bruta en metros/minuto.
+        quality_code (str): Codigo de calidad del tag ('Good', 'Bad_NotFound', etc.).
+        
+    Returns:
+        dict: Estructura normalizada con valor en m/s, estado y color de interfaz.
+    """
+    # 1. Validacion defensiva de calidad de origen
+    if quality_code is None or str(quality_code).upper() != "GOOD":
+        return {
+            "value_ms": 0.0,
+            "status": "SENSOR_ERROR",
+            "color": "#e74c3c", # Rojo
+            "is_valid": False
+        }
+    
+    # 2. Validacion de tipo y rango fisico del instrumento (0 a 120 m/min)
+    if raw_value is None or raw_value < 0.0 or raw_value > 120.0:
+        return {
+            "value_ms": 0.0,
+            "status": "OUT_OF_RANGE",
+            "color": "#f39c12", # Ambar
+            "is_valid": False
+        }
+    
+    # 3. Conversion de unidades de ingenieria (m/min a m/s)
+    # Division forzada a punto flotante compatible con Jython 2.7
+    speed_ms = round(float(raw_value) / 60.0, 2)
+    
+    # 4. Clasificacion de estado operativo
+    if speed_ms == 0.0:
+        status_text = "STOPPED"
+        status_color = "#95a5a6" # Gris
+    elif speed_ms < 0.8:
+        status_text = "SLOW"
+        status_color = "#3498db" # Azul
+    else:
+        status_text = "RUNNING"
+        status_color = "#2ecc71" # Verde
+        
+    return {
+        "value_ms": speed_ms,
+        "status": status_text,
+        "color": status_color,
+        "is_valid": True
+    }
+```
+
+**Paso 3: Definición del Vector de Pruebas**
+
+Añadir a continuación el código de ejecución con casos representativos de planta (caso nominal, máquina parada, sensor desconectado y desbordamiento de rango):
+
+```python
+# Bateria de casos de prueba
+test_cases = [
+    {"name": "Velocidad Nominal (75 m/min)",   "raw": 75.0,  "quality": "Good"},
+    {"name": "Cinta Parada (0 m/min)",         "raw": 0.0,   "quality": "Good"},
+    {"name": "Velocidad Lenta (30 m/min)",      "raw": 30.0,  "quality": "Good"},
+    {"name": "Fallo de Comunicacion Tag",      "raw": None,  "quality": "Bad_NotFound"},
+    {"name": "Valor Fuera de Escala (150 m/min)","raw": 150.0, "quality": "Good"},
+    {"name": "Lectura Negativa Ruido (-5 m/min)", "raw": -5.0,  "quality": "Good"}
+]
+
+print "=== RESULTADOS LABORATORIO 1.1 ==="
+for test in test_cases:
+    resultado = normalize_conveyor_telemetry(test["raw"], test["quality"])
+    print "Caso: {:<30} -> m/s: {:<5} | Estado: {:<12} | Color: {:<8} | Valido: {}".format(
+        test["name"],
+        resultado["value_ms"],
+        resultado["status"],
+        resultado["color"],
+        resultado["is_valid"]
+    )
+```
+
 ***
 
 ### 4. Tema 2: Analizando y Estructurando Tipos de Scripts en Ignition
@@ -204,6 +296,100 @@ flowchart TD
 
 * Script verificado en la Script Console que procesa marcas temporales en milisegundos y devuelve resúmenes en formato Unicode (`u"Parada de Xh Ym registrada el DD/MM/YYYY..."`) consumiendo clases Java.
 
+#### Paso a Paso para la Realización
+
+**Paso 1: Preparación en la Script Console**
+
+1. En la **Script Console**, limpiar el contenido del editor superior.
+
+**Paso 2: Implementación con Clases Java y Unicode**
+
+Copiar y pegar el siguiente código en la consola:
+
+```python
+from java.text import SimpleDateFormat
+from java.util import Date
+
+def format_industrial_event(timestamp_ms, duration_seconds, equipment_name, description):
+    """
+    Formatea un evento de planta combinando clases Java y Jython 2.7 Unicode.
+    
+    Args:
+        timestamp_ms (long|int|None): Marca temporal Epoch en milisegundos.
+        duration_seconds (float|int|None): Duracion total del evento en segundos.
+        equipment_name (str|unicode): Identificador del equipo (ej. 'EDAR_BOMBA_01').
+        description (str|unicode): Descripcion del evento con posibles caracteres especiales.
+        
+    Returns:
+        unicode: Texto descriptivo formateado y seguro contra errores de decodificacion.
+    """
+    # 1. Validacion de entradas nulas
+    if timestamp_ms is None or duration_seconds is None:
+        return u"Dades de l'esdeveniment no disponibles (Valors Nuls)"
+        
+    # 2. Uso de clase nativa Java para formatear la fecha
+    event_date = Date(long(timestamp_ms))
+    date_formatter = SimpleDateFormat("dd/MM/yyyy 'a les' HH:mm:ss")
+    formatted_date = date_formatter.format(event_date)
+    
+    # 3. Calculo de horas, minutos y segundos (division entera defensiva)
+    total_sec = int(duration_seconds)
+    hours = total_sec // 3600
+    minutes = (total_sec % 3600) // 60
+    seconds = total_sec % 60
+    
+    # 4. Construccion de cadena Unicode (.format compatible con Jython 2.7)
+    # Se evita el uso de f-strings (inexistentes en Python 2.7)
+    summary_text = u"Equip: {} | Event: {} | Durada: {}h {}m {}s | Registrat: {}".format(
+        unicode(equipment_name),
+        unicode(description),
+        hours,
+        minutes,
+        seconds,
+        unicode(formatted_date)
+    )
+    
+    return summary_text
+```
+
+**Paso 3: Casos de Prueba con Datos Reales del Sandbox**
+
+Añadir las pruebas ejecutando la función con marcas de tiempo actuales y equipos de la base de datos `SANDBOX_DB`:
+
+```python
+# Obtener timestamp actual en milisegundos desde Java
+now_epoch = Date().getTime()
+
+# Caso 1: Evento de parada en Bomba 1 con caracteres especiales
+e1 = format_industrial_event(
+    timestamp_ms=now_epoch,
+    duration_seconds=3725, # 1h 2m 5s
+    equipment_name="EDAR_BOMBA_01",
+    description=u"Fallo confirmación marcha (Sobrecàrrega tèrmica relé)"
+)
+
+# Caso 2: Microparada en Compresor 2
+e2 = format_industrial_event(
+    timestamp_ms=now_epoch - 7200000, # Hace 2 horas
+    duration_seconds=45,
+    equipment_name="EDAR_COMPRESOR_02",
+    description=u"Aturada per alta pressió d'oli"
+)
+
+# Caso 3: Entrada con datos incompletos
+e3 = format_industrial_event(
+    timestamp_ms=None,
+    duration_seconds=120,
+    equipment_name="DECANTADOR_01",
+    description=u"Revisió preventiva"
+)
+
+print "=== RESULTADOS LABORATORIO 1.2 ==="
+print e1
+print e2
+print e3
+```
+
 ***
 
 ### 7. Tema 4: Fundamentos de Lenguaje Aplicados a Casos SCADA
@@ -262,6 +448,113 @@ flowchart TD
 #### Resultado esperado
 
 * Algoritmo probado en la Script Console que recibe un `Dataset` tabular con múltiples lotes por máquina y genera un nuevo `Dataset` con cabeceras `["Machine", "Good Units", "Scrap Units", "Scrap Rate (%)"]` y filas consolidadas.
+
+#### Paso a Paso para la Realización
+
+**Paso 1: Preparación en la Script Console**
+
+1. En la **Script Console**, limpiar el editor superior.
+
+**Paso 2: Implementación del Algoritmo de Agregación Tabular**
+
+Copiar y pegar el siguiente código:
+
+```python
+def aggregate_machine_production(raw_dataset):
+    """
+    Agrupa produccion por maquina y calcula metricas de calidad y scrap.
+    
+    Args:
+        raw_dataset (Dataset): Dataset original inmutable de Ignition.
+        
+    Returns:
+        Dataset: Nuevo Dataset de Ignition con los totales agregados.
+    """
+    if raw_dataset is None or raw_dataset.getRowCount() == 0:
+        out_headers = ["Equip", "Bones", "Scrap", "Total", "Taxa_Rebuig_Pct"]
+        return system.dataset.toDataSet(out_headers, [])
+        
+    # 1. Conversion a PyDataSet para iteracion segura por nombre de columna
+    pyds = system.dataset.toPyDataSet(raw_dataset)
+    
+    # 2. Diccionario acumulador en memoria
+    summary = {}
+    
+    for row in pyds:
+        equip = row["equip"]
+        good_qty = row["good_units"] if row["good_units"] is not None else 0
+        scrap_qty = row["scrap_units"] if row["scrap_units"] is not None else 0
+        
+        if equip not in summary:
+            summary[equip] = {"good": 0, "scrap": 0}
+            
+        summary[equip]["good"] += good_qty
+        summary[equip]["scrap"] += scrap_qty
+        
+    # 3. Construccion de filas para el nuevo Dataset inmutable
+    out_headers = ["Equip", "Bones", "Scrap", "Total", "Taxa_Rebuig_Pct"]
+    out_rows = []
+    
+    # Iteracion ordenada por nombre de equipo
+    for equip in sorted(summary.keys()):
+        total_good = summary[equip]["good"]
+        total_scrap = summary[equip]["scrap"]
+        total_produced = total_good + total_scrap
+        
+        # Calculo defensivo de porcentaje de rechazo (evitando division por cero)
+        if total_produced > 0:
+            scrap_rate = (float(total_scrap) / float(total_produced)) * 100.0
+        else:
+            scrap_rate = 0.0
+            
+        out_rows.append([
+            equip,
+            total_good,
+            total_scrap,
+            total_produced,
+            round(scrap_rate, 2)
+        ])
+        
+    # 4. Creacion del Dataset final inmutable
+    return system.dataset.toDataSet(out_headers, out_rows)
+```
+
+**Paso 3: Simulación de Datos del Sandbox y Ejecución**
+
+Añadir la creación de un `Dataset` sintético con los nombres de equipos reales definidos en el script SQL (`EDAR_BOMBA_01`, `EDAR_COMPRESOR_01`, etc.):
+
+```python
+# Simular un Dataset que vendria de system.db.runNamedQuery o system.tag.queryTagHistory
+headers = ["equip", "batch_code", "good_units", "scrap_units"]
+data = [
+    ["EDAR_BOMBA_01",      "LOT-A101", 1200, 15],
+    ["EDAR_BOMBA_01",      "LOT-A102",  850,  8],
+    ["EDAR_BOMBA_02",      "LOT-B201", 2100, 95],
+    ["EDAR_COMPRESOR_01",  "LOT-C301",  450, 42],
+    ["EDAR_BOMBA_02",      "LOT-B202",  900, 20],
+    ["LINEA_ENVASADO_01",  "LOT-E501", 5000, 110],
+    ["LINEA_ENVASADO_01",  "LOT-E502", 4800,  85],
+    ["DECANTADOR_01",      "LOT-D401",    0,   0] # Caso extremo sin produccion
+]
+
+raw_ds = system.dataset.toDataSet(headers, data)
+
+# Ejecutar la transformacion
+result_ds = aggregate_machine_production(raw_ds)
+
+# Visualizar el resultado en la consola
+print "=== RESULTADOS LABORATORIO 1.3 ==="
+print "Dataset generado correctamente. Filas consolidadas:", result_ds.getRowCount()
+print "-" * 75
+
+pyds_result = system.dataset.toPyDataSet(result_ds)
+print "{:<20} | {:<8} | {:<8} | {:<8} | {:<12}".format("EQUIP", "BONES", "SCRAP", "TOTAL", "REBUIG (%)")
+print "-" * 75
+for row in pyds_result:
+    print "{:<20} | {:<8} | {:<8} | {:<8} | {:<12}%".format(
+        row["Equip"], row["Bones"], row["Scrap"], row["Total"], row["Taxa_Rebuig_Pct"]
+    )
+```
 
 ***
 
