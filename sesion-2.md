@@ -529,6 +529,7 @@ for c in casos_calidad:
 #### Contenidos
 
 * Evaluación conceptual breve de opción múltiple y análisis de casos arquitectónicos.
+* [https://docs.google.com/forms/d/e/1FAIpQLSeoaWrZGCxHgxUFV-WgZP\_ZdNc1BWW7TjRazVDu6lyqh--0sg/viewform?usp=publish-editor](https://docs.google.com/forms/d/e/1FAIpQLSeoaWrZGCxHgxUFV-WgZP_ZdNc1BWW7TjRazVDu6lyqh--0sg/viewform?usp=publish-editor)
 
 #### Resultado esperado
 
