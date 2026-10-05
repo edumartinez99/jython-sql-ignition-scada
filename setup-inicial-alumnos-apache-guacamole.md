@@ -31,8 +31,6 @@ Iniciamos sesión:
 * Usuario: `alumno01`
 * Password: `AlumnoPass01!`
 
-
-
 Pinchamos en Get Designer
 
 <figure><img src=".gitbook/assets/image (46).png" alt=""><figcaption></figcaption></figure>
@@ -41,17 +39,13 @@ Pinchamos en Get Designer
 \
 Pinchamos en Download for Linux:
 
-<figure><img src=".gitbook/assets/image (47).png" alt=""><figcaption></figcaption></figure>
-
-
+<figure><img src=".gitbook/assets/image (46).png" alt=""><figcaption></figcaption></figure>
 
 Abrimos el explorador de carpetas en el menú horizontal de la parte inferior.
 
 Nos vamos a Downloads/
 
 <figure><img src=".gitbook/assets/image (48).png" alt=""><figcaption></figcaption></figure>
-
-
 
 Hacemos click derecho y le damos a Open in Terminal here:<br>
 
@@ -64,8 +58,6 @@ Ejecutamos:
 
 <figure><img src=".gitbook/assets/image (50).png" alt=""><figcaption></figcaption></figure>
 
-
-
 Cerramos terminal, abrimos la nueva carpeta y ejecutamos el Designer:
 
 <figure><img src=".gitbook/assets/image (40).png" alt=""><figcaption></figcaption></figure>
@@ -76,7 +68,7 @@ Abrimos el Designer, le damos a Add Designer Manual, insertamos la URL del Gatew
 
 <figure><img src=".gitbook/assets/image (60).png" alt=""><figcaption></figcaption></figure>
 
-* Usuario: `alumno01`&#x20;
+* Usuario: `alumno01`
 * Password: `AlumnoPass01!`
 
 <figure><img src=".gitbook/assets/image (41).png" alt=""><figcaption></figcaption></figure>
@@ -117,8 +109,8 @@ Y abrimos dbeaver.
 
 * Elegimos Postgres y añadimos la configuración
   * Host: `postgres-maker-db`
-  * Database:   `sandbox_db_01`
-  * Username:   `ignition_user`
+  * Database: `sandbox_db_01`
+  * Username: `ignition_user`
   * Password: `DBPassword123!`
 
 <figure><img src=".gitbook/assets/image (59).png" alt=""><figcaption></figcaption></figure>
@@ -127,3 +119,13 @@ Y abrimos dbeaver.
 * Revisamos que haya datos
 
 <figure><img src=".gitbook/assets/image (58).png" alt=""><figcaption></figcaption></figure>
+
+#### Instalar Perspective
+
+```
+# 1. Actualizar repositorios e instalar todas las librerías gráficas corregidas en un solo paso
+sudo apt-get update && sudo apt-get install -y libasound2t64 libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1
+
+# 2. Borrar la caché corrupta del navegador interno de Ignition
+rm -rf ~/.ignition/cache/resources/jxbrowser/
+```
