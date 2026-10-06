@@ -1,5 +1,5 @@
 ---
-description: cripting Operativo con Tags, Calidades y Gestión de Turnos Industriales
+description: Scripting Operativo con Tags, Calidades y Gestión de Turnos Industriales
 ---
 
 # Sesión 7

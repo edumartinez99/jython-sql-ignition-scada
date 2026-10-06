@@ -240,7 +240,7 @@ print "-" * 80
 for inst in perspective_instances:
     d = inst["orderData"]
     s = inst["instanceStyle"]
-    print "Orden: {:<12} | Equip: {:<18} | Progreso: {:<6}% | Estat: {:<12} | Color: {}".format(
+    print "Orden: {:<12} | Equipo: {:<18} | Progreso: {:<6}% | Estado: {:<12} | Color: {}".format(
         d["work_order"], d["equip"], d["progress_pct"], d["status"], s["backgroundColor"]
     )
 ```
@@ -405,24 +405,24 @@ def calculate_availability(planned_time_min, downtime_min):
     """
     # 1. Validaciones defensivas de nulos
     if planned_time_min is None or downtime_min is None:
-        return (False, u"Els valors de temps no poden ser nuls")
+        return (False, u"Los valores de tiempo no pueden ser nulos")
         
     try:
         planned = float(planned_time_min)
         downtime = float(downtime_min)
     except (ValueError, TypeError):
-        return (False, u"Els parametres han de ser numerics")
+        return (False, u"Los parámetros deben ser numéricos")
         
     # 2. Validaciones de coherencia fisica
     if planned <= 0.0:
-        return (False, u"El temps planificat ha de ser superior a zero")
+        return (False, u"El tiempo planificado debe ser superior a cero")
         
     if downtime < 0.0:
-        return (False, u"El temps de parada no pot ser negatiu")
+        return (False, u"El tiempo de parada no puede ser negativo")
         
     operating_time = planned - downtime
     if operating_time < 0.0:
-        return (False, u"El temps de parada supera el temps planificat de torn")
+        return (False, u"El tiempo de parada supera el tiempo planificado de turno")
         
     # 3. Calculo porcentual
     availability = (operating_time / planned) * 100.0
@@ -441,19 +441,19 @@ def calculate_quality_rate(total_units, scrap_units):
         tuple: (bool success, float quality_pct | unicode error_message)
     """
     if total_units is None or scrap_units is None:
-        return (False, u"Els parametres d'unitats no poden ser nuls")
+        return (False, u"Los parámetros de unidades no pueden ser nulos")
         
     try:
         total = float(total_units)
         scrap = float(scrap_units)
     except (ValueError, TypeError):
-        return (False, u"Les quantitats han de ser numeriques")
+        return (False, u"Las cantidades deben ser numéricas")
         
     if total < 0.0 or scrap < 0.0:
-        return (False, u"Les unitats no poden ser negatives")
+        return (False, u"Las unidades no pueden ser negativas")
         
     if scrap > total:
-        return (False, u"La quantitat de rebuig no pot superar la produccio total")
+        return (False, u"La cantidad de rechazo no puede superar la producción total")
         
     # Si no hubo produccion, no se penaliza la calidad (100% nominal)
     if total == 0.0:
@@ -477,40 +477,40 @@ def calculate_quality_rate(total_units, scrap_units):
 ```python
 print "=== VALIDACION MODULAR: project.calc.kpi ==="
 
-# 1. Pruebas de Disponibilidad (Torn estandard de 8h = 480 min)
+# 1. Pruebas de Disponibilidad (Turno estándar de 8h = 480 min)
 casos_disponibilidad = [
     {"name": "Nominal (480 min planificados, 45 min parada)", "p": 480, "d": 45},
-    {"name": "Sense Parades (480 min planificados, 0 min parada)", "p": 480, "d": 0},
-    {"name": "Error: Parada major que torn (480 min, 600 min parada)", "p": 480, "d": 600},
-    {"name": "Error: Temps planificat zero (0 min, 0 min parada)", "p": 0, "d": 0},
-    {"name": "Error: Valor nul", "p": None, "d": 30}
+    {"name": "Sin Paradas (480 min planificados, 0 min parada)", "p": 480, "d": 0},
+    {"name": "Error: Parada mayor que turno (480 min, 600 min parada)", "p": 480, "d": 600},
+    {"name": "Error: Tiempo planificado cero (0 min, 0 min parada)", "p": 0, "d": 0},
+    {"name": "Error: Valor nulo", "p": None, "d": 30}
 ]
 
-print "\n--- Tests de Disponibilitat ---"
+print "\n--- Tests de Disponibilidad ---"
 for c in casos_disponibilidad:
     ok, resultado = project.calc.kpi.calculate_availability(c["p"], c["d"])
     estado = "OK " if ok else "ERR"
     if ok:
-        print "[{}] {:<55} -> Disponibilitat: {}%".format(estado, c["name"], resultado)
+        print "[{}] {:<55} -> Disponibilidad: {}%".format(estado, c["name"], resultado)
     else:
-        print "[{}] {:<55} -> Missatge: {}".format(estado, c["name"], resultado)
+        print "[{}] {:<55} -> Mensaje: {}".format(estado, c["name"], resultado)
 
 # 2. Pruebas de Tasa de Calidad
 casos_calidad = [
-    {"name": "Nominal (5000 bones + 120 scrap = 5120 total)", "tot": 5120, "scr": 120},
-    {"name": "Zero Rebuig (1000 total, 0 scrap)",            "tot": 1000, "scr": 0},
-    {"name": "Sense Produccio (0 total, 0 scrap)",          "tot": 0,    "scr": 0},
-    {"name": "Error: Scrap major que total (100 tot, 150 scr)", "tot": 100,  "scr": 150}
+    {"name": "Nominal (5000 buenas + 120 scrap = 5120 total)", "tot": 5120, "scr": 120},
+    {"name": "Cero Rechazo (1000 total, 0 scrap)",           "tot": 1000, "scr": 0},
+    {"name": "Sin Produccion (0 total, 0 scrap)",            "tot": 0,    "scr": 0},
+    {"name": "Error: Scrap mayor que total (100 tot, 150 scr)", "tot": 100,  "scr": 150}
 ]
 
-print "\n--- Tests de Taxa de Qualitat ---"
+print "\n--- Tests de Tasa de Calidad ---"
 for c in casos_calidad:
     ok, resultado = project.calc.kpi.calculate_quality_rate(c["tot"], c["scr"])
     estado = "OK " if ok else "ERR"
     if ok:
-        print "[{}] {:<55} -> Qualitat: {}%".format(estado, c["name"], resultado)
+        print "[{}] {:<55} -> Calidad: {}%".format(estado, c["name"], resultado)
     else:
-        print "[{}] {:<55} -> Missatge: {}".format(estado, c["name"], resultado)
+        print "[{}] {:<55} -> Mensaje: {}".format(estado, c["name"], resultado)
 ```
 
 #### Resultado esperado

@@ -325,11 +325,11 @@ def format_industrial_event(timestamp_ms, duration_seconds, equipment_name, desc
     """
     # 1. Validacion de entradas nulas
     if timestamp_ms is None or duration_seconds is None:
-        return u"Dades de l'esdeveniment no disponibles (Valors Nuls)"
+        return u"Datos del evento no disponibles (Valores Nulos)"
         
     # 2. Uso de clase nativa Java para formatear la fecha
     event_date = Date(long(timestamp_ms))
-    date_formatter = SimpleDateFormat("dd/MM/yyyy 'a les' HH:mm:ss")
+    date_formatter = SimpleDateFormat("dd/MM/yyyy 'a las' HH:mm:ss")
     formatted_date = date_formatter.format(event_date)
     
     # 3. Calculo de horas, minutos y segundos (division entera defensiva)
@@ -340,7 +340,7 @@ def format_industrial_event(timestamp_ms, duration_seconds, equipment_name, desc
     
     # 4. Construccion de cadena Unicode (.format compatible con Jython 2.7)
     # Se evita el uso de f-strings (inexistentes en Python 2.7)
-    summary_text = u"Equip: {} | Event: {} | Durada: {}h {}m {}s | Registrat: {}".format(
+    summary_text = u"Equipo: {} | Evento: {} | Duración: {}h {}m {}s | Registrado: {}".format(
         unicode(equipment_name),
         unicode(description),
         hours,
@@ -365,7 +365,7 @@ e1 = format_industrial_event(
     timestamp_ms=now_epoch,
     duration_seconds=3725, # 1h 2m 5s
     equipment_name="EDAR_BOMBA_01",
-    description=u"Fallo confirmación marcha (Sobrecàrrega tèrmica relé)"
+    description=u"Fallo confirmación marcha (Sobrecarga térmica relé)"
 )
 
 # Caso 2: Microparada en Compresor 2
@@ -373,7 +373,7 @@ e2 = format_industrial_event(
     timestamp_ms=now_epoch - 7200000, # Hace 2 horas
     duration_seconds=45,
     equipment_name="EDAR_COMPRESOR_02",
-    description=u"Aturada per alta pressió d'oli"
+    description=u"Parada por alta presión de aceite"
 )
 
 # Caso 3: Entrada con datos incompletos
@@ -381,7 +381,7 @@ e3 = format_industrial_event(
     timestamp_ms=None,
     duration_seconds=120,
     equipment_name="DECANTADOR_01",
-    description=u"Revisió preventiva"
+    description=u"Revisión preventiva"
 )
 
 print "=== RESULTADOS LABORATORIO 1.2 ==="
@@ -471,7 +471,7 @@ def aggregate_machine_production(raw_dataset):
         Dataset: Nuevo Dataset de Ignition con los totales agregados.
     """
     if raw_dataset is None or raw_dataset.getRowCount() == 0:
-        out_headers = ["Equip", "Bones", "Scrap", "Total", "Taxa_Rebuig_Pct"]
+        out_headers = ["Equipo", "Buenas", "Scrap", "Total", "Tasa_Rechazo_Pct"]
         return system.dataset.toDataSet(out_headers, [])
         
     # 1. Conversion a PyDataSet para iteracion segura por nombre de columna
@@ -492,7 +492,7 @@ def aggregate_machine_production(raw_dataset):
         summary[equip]["scrap"] += scrap_qty
         
     # 3. Construccion de filas para el nuevo Dataset inmutable
-    out_headers = ["Equip", "Bones", "Scrap", "Total", "Taxa_Rebuig_Pct"]
+    out_headers = ["Equipo", "Buenas", "Scrap", "Total", "Tasa_Rechazo_Pct"]
     out_rows = []
     
     # Iteracion ordenada por nombre de equipo
@@ -548,11 +548,11 @@ print "Dataset generado correctamente. Filas consolidadas:", result_ds.getRowCou
 print "-" * 75
 
 pyds_result = system.dataset.toPyDataSet(result_ds)
-print "{:<20} | {:<8} | {:<8} | {:<8} | {:<12}".format("EQUIP", "BONES", "SCRAP", "TOTAL", "REBUIG (%)")
+print "{:<20} | {:<8} | {:<8} | {:<8} | {:<12}".format("EQUIPO", "BUENAS", "SCRAP", "TOTAL", "RECHAZO (%)")
 print "-" * 75
 for row in pyds_result:
     print "{:<20} | {:<8} | {:<8} | {:<8} | {:<12}%".format(
-        row["Equip"], row["Bones"], row["Scrap"], row["Total"], row["Taxa_Rebuig_Pct"]
+        row["Equipo"], row["Buenas"], row["Scrap"], row["Total"], row["Tasa_Rechazo_Pct"]
     )
 ```
 
