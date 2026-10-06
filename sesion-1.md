@@ -563,6 +563,7 @@ for row in pyds_result:
 #### Objetivos
 
 * Evaluar la asimilación conceptual de los módulos de la jornada (Scopes, diferencias Jython/Python 3, inmutabilidad y estructuras de datos).
+* [https://docs.google.com/forms/d/e/1FAIpQLScj-Q0k6wMTxkL93MdbbjMmFxgiNzJqf6NksmjArTTIfx9eLQ/viewform?usp=dialog](https://docs.google.com/forms/d/e/1FAIpQLScj-Q0k6wMTxkL93MdbbjMmFxgiNzJqf6NksmjArTTIfx9eLQ/viewform?usp=dialog)
 * Detectar y corregir dudas técnicas antes de la Sesión 2.
 
 #### Contenidos

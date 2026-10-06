@@ -98,7 +98,7 @@ Hacemos click derecho y le damos a Open in Terminal here:
 Ejecutamos:
 
 * `cd Downloads/`
-* `tar -xvf dbeaver-ce-26.2.0-linux-x86_64.tar.gz`
+* `tar -xvf dbeaver-ce-26.2.2-linux-x86_64.tar.gz`
 
 Y abrimos dbeaver.
 
