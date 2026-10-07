@@ -20,13 +20,11 @@ Ejecutamos el exe
 
 Configuración por Usuario\
 Esperamos a que termine\
-Más adelante veremos cómo se utiliza&#x20;
-
-
+Más adelante veremos cómo se utiliza
 
 **Cliente de Base de Datos** (opcional pero recomendado: DBeaver, pgAdmin) para inspeccionar PostgreSQL. [https://dbeaver.io/download/](https://dbeaver.io/download/)
 
-<figure><img src=".gitbook/assets/image (3).png" alt=""><figcaption></figcaption></figure>
+<figure><img src=".gitbook/assets/image (2).png" alt=""><figcaption></figcaption></figure>
 
 Descargar la versión zip\
 Extraer todo
@@ -69,11 +67,11 @@ Arriba a la derecha gestionamos la cuenta
 
 Iniciamos sesión o creamos cuenta nueva
 
-<figure><img src=".gitbook/assets/image (11).png" alt=""><figcaption></figcaption></figure>
+<figure><img src=".gitbook/assets/image (7).png" alt=""><figcaption></figcaption></figure>
 
 Administrar cuenta
 
-<figure><img src=".gitbook/assets/image (13).png" alt=""><figcaption></figcaption></figure>
+<figure><img src=".gitbook/assets/image (12).png" alt=""><figcaption></figcaption></figure>
 
 Maker licenses y abajo a la derecha darle a Add/Añadir
 

@@ -471,6 +471,7 @@ def parse_production_string_robust(raw_string):
 #### Contenidos
 
 * Cuestionario técnico de opción múltiple y resolución de casos de diagnóstico de errores en entornos Ignition.
+* [https://docs.google.com/forms/d/e/1FAIpQLSeocPtrvBenTsTCPyqhRuzWHf0XfIgtMLZ5sJq1g-SYC-VEWg/viewform?usp=publish-editor](https://docs.google.com/forms/d/e/1FAIpQLSeocPtrvBenTsTCPyqhRuzWHf0XfIgtMLZ5sJq1g-SYC-VEWg/viewform?usp=publish-editor)
 
 #### Resultado esperado
 

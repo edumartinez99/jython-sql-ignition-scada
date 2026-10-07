@@ -28,10 +28,8 @@ Insertamos la URL del Gateway: [http://35.204.54.113:8088/](http://35.204.54.113
 
 Iniciamos sesión:
 
-* Usuario: `alumno02`&#x20;
+* Usuario: `alumno02`
 * Password: `AlumnoPass02!`
-
-
 
 Pinchamos en Get Designer
 
@@ -41,17 +39,13 @@ Pinchamos en Get Designer
 \
 Pinchamos en Download for Linux:
 
-<figure><img src=".gitbook/assets/image (47).png" alt=""><figcaption></figcaption></figure>
-
-
+<figure><img src=".gitbook/assets/image (46).png" alt=""><figcaption></figcaption></figure>
 
 Abrimos el explorador de carpetas en el menú horizontal de la parte inferior.
 
 Nos vamos a Downloads/
 
 <figure><img src=".gitbook/assets/image (48).png" alt=""><figcaption></figcaption></figure>
-
-
 
 Hacemos click derecho y le damos a Open in Terminal here:<br>
 
@@ -64,8 +58,6 @@ Ejecutamos:
 
 <figure><img src=".gitbook/assets/image (50).png" alt=""><figcaption></figcaption></figure>
 
-
-
 Cerramos terminal, abrimos la nueva carpeta y ejecutamos el Designer:
 
 <figure><img src=".gitbook/assets/image (40).png" alt=""><figcaption></figcaption></figure>
@@ -76,7 +68,7 @@ Abrimos el Designer, le damos a Add Designer Manual, insertamos la URL del Gatew
 
 <figure><img src=".gitbook/assets/image (60).png" alt=""><figcaption></figcaption></figure>
 
-* Usuario: `alumno02`&#x20;
+* Usuario: `alumno02`
 * Password: `AlumnoPass02!`
 
 <figure><img src=".gitbook/assets/image (41).png" alt=""><figcaption></figcaption></figure>
@@ -117,8 +109,8 @@ Y abrimos dbeaver.
 
 * Elegimos Postgres y añadimos la configuración
   * Host: `postgres-maker-db`
-  * Database:   `sandbox_db_02`
-  * Username:   `ignition_user`
+  * Database: `sandbox_db_02`
+  * Username: `ignition_user`
   * Password: `DBPassword123!`
 
 <figure><img src=".gitbook/assets/image (59).png" alt=""><figcaption></figcaption></figure>
