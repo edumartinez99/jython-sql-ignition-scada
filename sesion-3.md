@@ -373,6 +373,26 @@ def parse_production_string_legacy(raw_string):
     return "Lote " + batch_id + " Rendimiento: " + str(yield_rate) + "%"
 ```
 
+Añadir a continuación la ejecución contra los 6 casos de prueba:
+
+```python
+casos_problema = [
+    {"name": "Caso Nominal Valido",            "raw": "LOT-EDAR-2026;1000;25"},
+    {"name": "Produccion Cero (Evita div/0)",  "raw": "LOT-EDAR-2027;0;0"},
+    {"name": "Inconsistencia: Scrap > Total",   "raw": "LOT-EDAR-2028;500;650"},
+    {"name": "Error de Tipo: Texto en numero", "raw": "LOT-EDAR-2029;MIL;20"},
+    {"name": "Estructura incompleta (1 campo)","raw": "LOT-EDAR-2030"},
+    {"name": "Cadena nula (None)",              "raw": None}
+]
+
+print "=== VALIDACION LABORATORIO 3.3: SCRIPT ==="
+for c in casos_problema:
+    msg = parse_production_string_legacy(c["raw"])
+    print "{:<32} -> {}".format(estado, c["name"], msg)
+```
+
+**Paso 5: Eje**
+
 **Paso 2: Aplicación del Flujo de Depuración (Debug Loop)**
 
 1. **Reproducir el error:** Ejecutar `parse_production_string_legacy("LOT-99;0;0")` en consola -> Arroja `ZeroDivisionError: float division by zero`.
