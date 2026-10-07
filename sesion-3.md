@@ -31,7 +31,6 @@ description: Script Console, Pruebas Rápidas y Metodología de Depuración
 * Dominar las herramientas de introspección nativas de Jython para analizar tipos, métodos y estructuras complejas en memoria.
 * Identificar las diferencias de comportamiento y permisos entre la consola de diseño, las sesiones de usuario y el Gateway.
 
-
 #### Contenidos
 
 **1. Ciclo de Vida y Recarga de Módulos en el Designer**
@@ -71,68 +70,6 @@ description: Script Console, Pruebas Rápidas y Metodología de Depuración
 
 ***
 
-### 3. Tema 7 (Continuación): Metodología de Depuración Sistemática y Simulación (Mocks)
-
-#### Objetivos
-
-* Aplicar un flujo de trabajo ordenado y reproducible para aislar y corregir fallos en scripts industriales.
-* Clasificar las causas raíz de error entre fallos de sintaxis, discrepancias de datos de planta y problemas de infraestructura o scope.
-* Construir datos sintéticos simulados (_Mocks_) para desacoplar el testing de la lógica respecto al estado real de los PLCs y bases de datos.
-
-#### Contenidos
-
-**1. Metodología Sistemática de Depuración (**_**The 6-Step Debug Loop**_**)**
-
-```mermaid
-flowchart LR
-    Fase1[1. Reproducir] --> Fase2[2. Aislar]
-    Fase2 --> Fase3[3. Inspeccionar]
-    Fase3 --> Fase4[4. Corregir]
-    Fase4 --> Fase5[5. Validar]
-    Fase5 --> Fase6[6. Limpiar]
-```
-
-* **Fase 1: Reproducir el fallo:** Capturar los parámetros exactos (valores de tags, inputs de operador, timestamps) que provocaron el error.
-* **Fase 2: Aislar en la Script Console:** Extraer la función sospechosa fuera del componente gráfico o del evento de Gateway y llevarla a la consola con entradas controladas.
-* **Fase 3: Inspeccionar variables y tipos:** Colocar puntos de impresión para verificar el tipo de dato de cada variable intermedia y comprobar si existen valores `None` o cadenas vacías imprevistas.
-* **Fase 4: Corregir la lógica:** Implementar validaciones defensivas, conversiones explícitas de tipo o reestructuración del algoritmo.
-* **Fase 5: Validar con casos límite:** Ejecutar la función corregida sometiéndola a una batería de pruebas con valores nominales, ceros, negativos, nulos y extremos.
-* **Fase 6: Limpiar y desplegar:** Eliminar todos los `print` temporales de depuración antes de reintegrar la función en `Project Library` y guardar el proyecto.
-
-**2. Taxonomía de Errores en Sistemas Ignition SCADA**
-
-* **A. Errores de Código y Sintaxis (Jython):**
-  * `TypeError`: Intentar operar tipos incompatibles (ej. concatenar texto con números, operar sobre `None`).
-  * `KeyError`: Intentar acceder a una clave inexistente en un diccionario (`dict["presion"]` cuando la clave es `"pressure"`).
-  * `IndexError`: Intentar acceder a una fila o columna fuera de los límites de una lista o dataset.
-  * `ZeroDivisionError`: División por cero en cálculos de rendimiento donde la producción planificada o las unidades son 0.
-* **B. Errores por Anomalías en Datos de Planta:**
-  * Variables con calidad `Bad_NotFound`, `Bad_Stale` o `Uncertain` que entregan valores `None` al script.
-  * Cadenas numéricas mal formateadas procedentes de básculas o escáneres (ej. `"12,50"` con coma decimal en lugar de punto `"12.50"`).
-* **C. Errores de Infraestructura y Conectividad:**
-  * `java.sql.SQLException`: Timeouts de base de datos, credenciales expiradas o tablas bloqueadas.
-  * `java.net.SocketTimeoutException`: Caída de conexión al consultar APIs externas o servicios web.
-* **D. Errores de Discrepancia de Scope (**_**Scope Mismatch**_**):**
-  * Intentar invocar funciones de interfaz de Vision (`system.gui.*`) dentro de sesiones web de Perspective.
-  * Intentar acceder a propiedades de sesión en scripts de Gateway desatendidos (como Scheduled Scripts).
-
-**3. Simulación de Datos (**_**Mocking**_**) y Pruebas Unitarias Manuales**
-
-* **Por qué crear datos sintéticos (Mocks):**
-  * Una máquina en parada no entrega lecturas dinámicas.
-  * No es aceptable forzar un fallo real en la línea física (ej. sobrecalentar un horno) solo para probar si el script de alarma reacciona correctamente.
-* **Construcción de Mocks en la Script Console:**
-  * **Simulación de Datasets:** Uso de `system.dataset.toDataSet(headers, data)` para construir respuestas artificiales de consultas SQL que incluyan casos nominales y filas con datos nulos.
-  * **Simulación de Estructuras de Tags:** Creación de diccionarios que emulan la estructura retornada por `system.tag.readBlocking` con diferentes códigos de calidad (`Good`, `Bad`).
-* **Diseño de Micro-Runners de Pruebas:**
-  * Creación de funciones evaluadoras de aserciones (`assert_equal(obtenido, esperado)`) para validar automáticamente múltiples condiciones de una función en un solo clic dentro de la consola.
-
-#### Resultado esperado
-
-* Dominio de una metodología de depuración estructurada que elimina el método de prueba y error a ciegas en entornos de producción.
-
-***
-
 ### 4. Laboratorio 3.1: Inspección de Tipos y Mocking de Respuestas SQL
 
 #### Objetivos
@@ -143,8 +80,6 @@ flowchart LR
 #### Resultado esperado
 
 * Script verificado en la Script Console que genera un `Dataset` simulado con lecturas de presión y estados de máquina, inspecciona sus metadatos y recorre sus filas extrayendo valores con formateo numérico defensivo ante valores nulos.
-
-
 
 #### Paso a Paso para la Realización
 
@@ -218,6 +153,68 @@ for idx, row in enumerate(pyds):
 
 ***
 
+### 3. Tema 7 (Continuación): Metodología de Depuración Sistemática y Simulación (Mocks)
+
+#### Objetivos
+
+* Aplicar un flujo de trabajo ordenado y reproducible para aislar y corregir fallos en scripts industriales.
+* Clasificar las causas raíz de error entre fallos de sintaxis, discrepancias de datos de planta y problemas de infraestructura o scope.
+* Construir datos sintéticos simulados (_Mocks_) para desacoplar el testing de la lógica respecto al estado real de los PLCs y bases de datos.
+
+#### Contenidos
+
+**1. Metodología Sistemática de Depuración (**_**The 6-Step Debug Loop**_**)**
+
+```mermaid
+flowchart LR
+    Fase1[1. Reproducir] --> Fase2[2. Aislar]
+    Fase2 --> Fase3[3. Inspeccionar]
+    Fase3 --> Fase4[4. Corregir]
+    Fase4 --> Fase5[5. Validar]
+    Fase5 --> Fase6[6. Limpiar]
+```
+
+* **Fase 1: Reproducir el fallo:** Capturar los parámetros exactos (valores de tags, inputs de operador, timestamps) que provocaron el error.
+* **Fase 2: Aislar en la Script Console:** Extraer la función sospechosa fuera del componente gráfico o del evento de Gateway y llevarla a la consola con entradas controladas.
+* **Fase 3: Inspeccionar variables y tipos:** Colocar puntos de impresión para verificar el tipo de dato de cada variable intermedia y comprobar si existen valores `None` o cadenas vacías imprevistas.
+* **Fase 4: Corregir la lógica:** Implementar validaciones defensivas, conversiones explícitas de tipo o reestructuración del algoritmo.
+* **Fase 5: Validar con casos límite:** Ejecutar la función corregida sometiéndola a una batería de pruebas con valores nominales, ceros, negativos, nulos y extremos.
+* **Fase 6: Limpiar y desplegar:** Eliminar todos los `print` temporales de depuración antes de reintegrar la función en `Project Library` y guardar el proyecto.
+
+**2. Taxonomía de Errores en Sistemas Ignition SCADA**
+
+* **A. Errores de Código y Sintaxis (Jython):**
+  * `TypeError`: Intentar operar tipos incompatibles (ej. concatenar texto con números, operar sobre `None`).
+  * `KeyError`: Intentar acceder a una clave inexistente en un diccionario (`dict["presion"]` cuando la clave es `"pressure"`).
+  * `IndexError`: Intentar acceder a una fila o columna fuera de los límites de una lista o dataset.
+  * `ZeroDivisionError`: División por cero en cálculos de rendimiento donde la producción planificada o las unidades son 0.
+* **B. Errores por Anomalías en Datos de Planta:**
+  * Variables con calidad `Bad_NotFound`, `Bad_Stale` o `Uncertain` que entregan valores `None` al script.
+  * Cadenas numéricas mal formateadas procedentes de básculas o escáneres (ej. `"12,50"` con coma decimal en lugar de punto `"12.50"`).
+* **C. Errores de Infraestructura y Conectividad:**
+  * `java.sql.SQLException`: Timeouts de base de datos, credenciales expiradas o tablas bloqueadas.
+  * `java.net.SocketTimeoutException`: Caída de conexión al consultar APIs externas o servicios web.
+* **D. Errores de Discrepancia de Scope (**_**Scope Mismatch**_**):**
+  * Intentar invocar funciones de interfaz de Vision (`system.gui.*`) dentro de sesiones web de Perspective.
+  * Intentar acceder a propiedades de sesión en scripts de Gateway desatendidos (como Scheduled Scripts).
+
+**3. Simulación de Datos (**_**Mocking**_**) y Pruebas Unitarias Manuales**
+
+* **Por qué crear datos sintéticos (Mocks):**
+  * Una máquina en parada no entrega lecturas dinámicas.
+  * No es aceptable forzar un fallo real en la línea física (ej. sobrecalentar un horno) solo para probar si el script de alarma reacciona correctamente.
+* **Construcción de Mocks en la Script Console:**
+  * **Simulación de Datasets:** Uso de `system.dataset.toDataSet(headers, data)` para construir respuestas artificiales de consultas SQL que incluyan casos nominales y filas con datos nulos.
+  * **Simulación de Estructuras de Tags:** Creación de diccionarios que emulan la estructura retornada por `system.tag.readBlocking` con diferentes códigos de calidad (`Good`, `Bad`).
+* **Diseño de Micro-Runners de Pruebas:**
+  * Creación de funciones evaluadoras de aserciones (`assert_equal(obtenido, esperado)`) para validar automáticamente múltiples condiciones de una función en un solo clic dentro de la consola.
+
+#### Resultado esperado
+
+* Dominio de una metodología de depuración estructurada que elimina el método de prueba y error a ciegas en entornos de producción.
+
+***
+
 ### 5. Laboratorio 3.2: Mini-Runner de Pruebas Unitarias para Project Library
 
 #### Objetivos
@@ -228,7 +225,6 @@ for idx, row in enumerate(pyds):
 #### Resultado esperado
 
 * Script ejecutable en la Script Console que evalúa automáticamente las funciones del módulo `project.calc.kpi` y emite un informe estructurado por consola indicando el estado de cada test (`PASS` / `FAIL`) y el resumen de pruebas superadas.
-
 
 #### Paso a Paso para la Realización
 
