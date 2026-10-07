@@ -369,10 +369,6 @@ def parse_production_string_legacy(raw_string):
     total_parts = parts[1]
     bad_parts = parts[2]
     
-    # Error 1: IndexError si la cadena no tiene exactamente 3 campos
-    # Error 2: TypeError / ValueError si total_parts o bad_parts no son convertibles a float
-    # Error 3: ZeroDivisionError si total_parts es 0
-    # Error 4: Incompatibilidad si bad_parts > total_parts
     yield_rate = ((float(total_parts) - float(bad_parts)) / float(total_parts)) * 100.0
     return "Lote " + batch_id + " Rendimiento: " + str(yield_rate) + "%"
 ```
