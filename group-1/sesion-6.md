@@ -302,7 +302,7 @@ flowchart LR
 #### Contenidos
 
 * Cuestionario técnico de opción múltiple y resolución de casos prácticos sobre concurrencia, transforms y eventos de Gateway.
-* https://docs.google.com/forms/d/e/1FAIpQLScoVlHDorDBCewEhUE4wNgG5-g2I_b0td1b0eY6wW59QEayCA/viewform?usp=publish-editor
+* [Cuestionario Sesión 6](https://docs.google.com/forms/d/e/1FAIpQLScoVlHDorDBCewEhUE4wNgG5-g2I_b0td1b0eY6wW59QEayCA/viewform?usp=publish-editor)
 
 #### Resultado esperado
 

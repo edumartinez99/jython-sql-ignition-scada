@@ -228,7 +228,7 @@ flowchart LR
 #### Contenidos
 
 * Cuestionario técnico individual de opción múltiple y resolución de casos de diseño seguro de consultas y auditoría.
-* https://docs.google.com/forms/d/e/1FAIpQLSdENIk0hUBa_KXuzF0ycJa3vv02xlAvEzA1ZsgAkQSFlzW8oA/viewform?usp=publish-editor
+* [Cuestionario Sesión 5](https://docs.google.com/forms/d/e/1FAIpQLSdENIk0hUBa_KXuzF0ycJa3vv02xlAvEzA1ZsgAkQSFlzW8oA/viewform?usp=publish-editor)
 
 #### Resultado esperado
 
