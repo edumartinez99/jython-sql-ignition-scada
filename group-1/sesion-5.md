@@ -115,6 +115,234 @@ flowchart TD
 
 * Función verificada en la Script Console que procesa modificaciones nominales de consignas, rechaza valores fuera de rango físico o solicitudes sin motivo justificado, e inserta la correspondiente traza de auditoría en la base de datos sandbox.
 
+
+
+#### 4. Paso a Paso para la Realización
+
+**Paso 1: Creación de la Tabla de Consignas en el Sandbox (SQL)**
+
+1. En **Ignition Designer**, abrir **Tools -> Database Query Browser**.
+2. Seleccionar la conexión `SANDBOX_DB`.
+3. Ejecutar la siguiente sentencia DDL para crear la tabla de consignas operativas con soporte de borrado lógico:
+
+```sql
+CREATE TABLE IF NOT EXISTS machine_setpoints (
+    id SERIAL PRIMARY KEY,
+    equip VARCHAR(100) UNIQUE NOT NULL,
+    flow_sp DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    pressure_sp DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(100) NOT NULL DEFAULT 'SYSTEM'
+);
+
+-- Insertar consignas base para los equipos del sandbox
+INSERT INTO machine_setpoints (equip, flow_sp, pressure_sp, is_active, updated_by)
+VALUES 
+    ('EDAR_BOMBA_01', 45.0, 3.5, TRUE, 'admin'),
+    ('EDAR_BOMBA_02', 50.0, 4.0, TRUE, 'admin'),
+    ('EDAR_COMPRESOR_01', 80.0, 6.5, TRUE, 'admin'),
+    ('VALVULA_RECIRC_01', 25.0, 2.0, TRUE, 'admin')
+ON CONFLICT (equip) DO NOTHING;
+```
+
+**Paso 2: Creación del Módulo en Project Library**
+
+1. En el _Project Browser_, desplegar **Server Scripting -> Project Library**.
+2. Crear el script: `setpoints.service` (carpeta `setpoints`, script `service`).
+
+**Paso 3: Implementación de la Lógica de Modificación y Auditoría**
+
+Copiar y guardar el siguiente código en `project.setpoints.service`:
+
+```python
+"""
+Modulo: project.setpoints.service
+Descripcion: Gestion segura de consignas con validacion de limites de ingenieria,
+             verificacion de filas afectadas, auditoria y borrado logico.
+Autor: Equipo SCADA
+"""
+
+# Limites de ingenieria admisibles en planta
+LIMITS = {
+    "flow_sp": {"min": 0.0, "max": 150.0, "unit": "m3/h"},
+    "pressure_sp": {"min": 0.0, "max": 10.0, "unit": "bar"}
+}
+
+def update_setpoint_with_audit(equip, param_name, new_value, username, reason, db_conn="SANDBOX_DB"):
+    """
+    Valida limites, actualiza la consigna de un equipo y registra auditoria en ins_Registre_Actuacions.
+    
+    Args:
+        equip (str): Identificador del equipo (ej. 'EDAR_BOMBA_01').
+        param_name (str): 'flow_sp' o 'pressure_sp'.
+        new_value (float|int): Nuevo valor de la consigna.
+        username (str): Nombre del usuario que autoriza el cambio.
+        reason (str): Justificacion operativa obligatoria (min. 5 caracteres).
+        db_conn (str): Nombre de la conexion de base de datos en Ignition.
+        
+    Returns:
+        tuple: (bool success, unicode message)
+    """
+    logger = system.util.getLogger("SCADA.Setpoints")
+    
+    # 1. Validaciones defensivas de entrada
+    if not equip or not param_name or username is None:
+        return (False, u"Parámetros de identificación incompletos")
+        
+    if param_name not in LIMITS:
+        return (False, u"Parámetro desconocido: {}".format(param_name))
+        
+    if not reason or len(reason.strip()) < 5:
+        return (False, u"Es obligatorio introducir un motivo justificativo (mínimo 5 caracteres)")
+        
+    try:
+        val_num = float(new_value)
+    except (ValueError, TypeError):
+        return (False, u"El valor de la consigna debe ser numérico")
+        
+    # 2. Validacion de limites fisicos
+    p_lim = LIMITS[param_name]
+    if val_num < p_lim["min"] or val_num > p_lim["max"]:
+        return (False, u"Valor {:.2f} fuera de rango [{:.1f} - {:.1f} {}]".format(
+            val_num, p_lim["min"], p_lim["max"], p_lim["unit"]
+        ))
+        
+    try:
+        # 3. Obtener el valor anterior para la pista de auditoria
+        select_sql = "SELECT " + param_name + ", is_active FROM machine_setpoints WHERE equip = ?"
+        current_data = system.db.runPrepQuery(select_sql, [equip], database=db_conn)
+        
+        if len(current_data) == 0:
+            return (False, u"El equipo '{}' no existe en la tabla de consignas".format(equip))
+            
+        old_val = current_data[0][param_name]
+        is_active = current_data[0]["is_active"]
+        
+        if not is_active:
+            return (False, u"El equipo '{}' se encuentra desactivado (Baja Lógica)".format(equip))
+            
+        # 4. Actualizacion segura con Prepared Statement
+        update_sql = """
+            UPDATE machine_setpoints 
+            SET """ + param_name + """ = ?, updated_by = ?, last_updated = CURRENT_TIMESTAMP 
+            WHERE equip = ? AND is_active = TRUE
+        """
+        rows_affected = system.db.runPrepUpdate(update_sql, [val_num, username, equip], database=db_conn)
+        
+        if rows_affected != 1:
+            logger.warn("Inconsistencia en update_setpoint: {} filas afectadas".format(rows_affected))
+            return (False, u"No se ha podido actualizar la consigna (Filas afectadas: {})".format(rows_affected))
+            
+        # 5. Registro de auditoria en la tabla ins_Registre_Actuacions (PDF Pag. 10 y 14)
+        audit_desc = u"Cambio Consigna {} [{} -> {:.2f} {}]. Motivo: {}".format(
+            unicode(param_name), old_val, val_num, unicode(p_lim["unit"]), unicode(reason.strip())
+        )
+        audit_sql = """
+            INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """
+        system.db.runPrepUpdate(audit_sql, [equip, audit_desc, username], database=db_conn)
+        
+        logger.info("Consigna actualizada: {} | {} | Usuario: {}".format(equip, audit_desc, username))
+        return (True, u"Consigna actualizada y auditada correctamente")
+        
+    except Exception as ex:
+        logger.error("Error al actualizar consigna de {}: {}".format(equip, str(ex)))
+        return (False, u"Error interno de base de datos")
+
+
+def soft_delete_setpoint(equip, username, reason, db_conn="SANDBOX_DB"):
+    """
+    Aplica borrado logico a una consigna (is_active = FALSE) registrando auditoria.
+    """
+    logger = system.util.getLogger("SCADA.Setpoints")
+    
+    if not reason or len(reason.strip()) < 5:
+        return (False, u"Motivo de baja obligatorio (mínimo 5 caracteres)")
+        
+    try:
+        update_sql = """
+            UPDATE machine_setpoints 
+            SET is_active = FALSE, updated_by = ?, last_updated = CURRENT_TIMESTAMP 
+            WHERE equip = ? AND is_active = TRUE
+        """
+        rows = system.db.runPrepUpdate(update_sql, [username, equip], database=db_conn)
+        
+        if rows == 1:
+            audit_desc = u"Baja Lógica de Consigna. Motivo: {}".format(unicode(reason.strip()))
+            audit_sql = "INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari) VALUES (?, ?, ?)"
+            system.db.runPrepUpdate(audit_sql, [equip, audit_desc, username], database=db_conn)
+            return (True, u"Equipo desactivado correctamente (Baja Lógica)")
+        else:
+            return (False, u"El equipo no existe o ya estaba desactivado")
+            
+    except Exception as ex:
+        logger.error("Error en baja lógica de {}: {}".format(equip, str(ex)))
+        return (False, u"Error interno al procesar la baja lógica")
+```
+
+**Paso 4: Guardar el Proyecto**
+
+1. Guardar en el Designer (**File -> Save** o `Ctrl+S`).
+
+**Paso 5: Pruebas y Validación desde la Script Console**
+
+1. Abrir la **Script Console**.
+2. Ejecutar la batería de pruebas:
+
+```python
+print "=== VALIDACION LABORATORIO 5.1: ESCRITURAS DEFENSIVAS Y AUDITORIA ==="
+
+# Caso 1: Modificacion nominal de caudal en EDAR_BOMBA_01 (45 -> 62.5 m3/h)
+ok1, msg1 = project.setpoints.service.update_setpoint_with_audit(
+    equip="EDAR_BOMBA_01",
+    param_name="flow_sp",
+    new_value=62.5,
+    username="marti.sanchez",
+    reason="Ajuste por aumento de caudal de entrada a planta"
+)
+print "\nCaso 1 (Nominal)     -> Exito: {} | Mensaje: {}".format(ok1, msg1)
+
+# Caso 2: Rechazo por valor fuera de rango fisico (250 m3/h > max 150 m3/h)
+ok2, msg2 = project.setpoints.service.update_setpoint_with_audit(
+    equip="EDAR_BOMBA_01",
+    param_name="flow_sp",
+    new_value=250.0,
+    username="operador_noche",
+    reason="Pruebas de sobrepresión"
+)
+print "Caso 2 (Fuera Rango) -> Exito: {} | Mensaje: {}".format(ok2, msg2)
+
+# Caso 3: Rechazo por falta de justificacion (motivo vacio)
+ok3, msg3 = project.setpoints.service.update_setpoint_with_audit(
+    equip="EDAR_COMPRESOR_01",
+    param_name="pressure_sp",
+    new_value=7.0,
+    username="carlos.gomez",
+    reason=" "
+)
+print "Caso 3 (Sin Motivo)  -> Exito: {} | Mensaje: {}".format(ok3, msg3)
+
+# Caso 4: Borrado logico de VALVULA_RECIRC_01
+ok4, msg4 = project.setpoints.service.soft_delete_setpoint(
+    equip="VALVULA_RECIRC_01",
+    username="mantenimiento_01",
+    reason="Mantenimiento preventivo anual - Válvula fuera de servicio"
+)
+print "Caso 4 (Soft Delete) -> Exito: {} | Mensaje: {}".format(ok4, msg4)
+```
+
+**Paso 6: Verificación en Base de Datos**
+
+1.  En el **Database Query Browser**, ejecutar:
+
+    ```sql
+    SELECT equip, flow_sp, pressure_sp, is_active, updated_by, last_updated FROM machine_setpoints;
+    SELECT * FROM ins_Registre_Actuacions ORDER BY id DESC LIMIT 5;
+    ```
+2. **Verificación:** Comprobar que `EDAR_BOMBA_01` tiene el nuevo caudal `62.5`, `VALVULA_RECIRC_01` tiene `is_active = false` y en `ins_Registre_Actuacions` aparecen los registros de auditoría detallados.
+
 ***
 
 ### 4. Tema 11: Named Queries como Capa de Abstracción y Acceso Seguro a Datos
@@ -214,6 +442,159 @@ flowchart LR
 #### Resultado esperado
 
 * Named Query creada en el árbol del Designer y consumida desde una función modular en `Project Library`, verificada mediante la Script Console ante llamadas nominales y llamadas con parámetros incorrectos, comprobando la persistencia en la tabla `stoppage_events`.
+
+
+#### 4. Paso a Paso para la Realización
+
+**Paso 1: Configuración de la Named Query en Ignition Designer**
+
+1. En el panel **Project Browser**, navegar a **Named Queries**.
+2. Hacer clic derecho, seleccionar **New Folder** y nombrarla: `Actuacions`.
+3. Hacer clic derecho sobre la carpeta `Actuacions`, seleccionar **New Query** y nombrarla: `InsertRegistre`.
+4. En el panel de configuración de la Named Query:
+   * **Database Connection:** Seleccionar la conexión por defecto (`SANDBOX_DB`).
+   * **Query Type:** Seleccionar **Update Query**.
+5. En la sección **Parameters** (panel superior derecho), añadir 3 parámetros de tipo **Value** (haciendo clic en el botón `+`):
+   * Parameter 1: Name = `equip`, Type = `String`
+   * Parameter 2: Name = `descripcio`, Type = `String`
+   * Parameter 3: Name = `usuari`, Type = `String`
+6.  En el editor SQL inferior, pegar la siguiente consulta parametrizada:
+
+    ```sql
+    INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
+    VALUES (:equip, :descripcio, :usuari, CURRENT_TIMESTAMP)
+    ```
+7. En la pestaña **Testing** (superior), introducir valores de prueba (`equip` = `EDAR_BOMBA_01`, `descripcio` = `Test Named Query`, `usuari` = `admin`) y pulsar **Execute**. Verificar que devuelve `1 row affected`.
+
+```mermaid
+flowchart LR
+    subgraph Designer_NamedQuery [Named Query: Actuacions/InsertRegistre]
+        Param1[:equip (Value Parameter)]
+        Param2[:descripcio (Value Parameter)]
+        Param3[:usuari (Value Parameter)]
+        SQLTemplate[INSERT INTO ins_Registre_Actuacions VALUES :equip, :descripcio, :usuari]
+    end
+
+    subgraph Base_Datos [Motor PostgreSQL: SANDBOX_DB]
+        PreparedStatement[PreparedStatement Nativo JDBC: Inmune a SQLi]
+        TableAudit[(ins_Registre_Actuacions)]
+        PreparedStatement --> TableAudit
+    end
+
+    Designer_NamedQuery --> PreparedStatement
+```
+
+**Paso 2: Implementación del Módulo Consumidor en Project Library**
+
+1. En **Project Library**, crear el script: `actuacions.service` (carpeta `actuacions`, script `service`).
+2. Copiar y guardar el siguiente código:
+
+```python
+"""
+Modulo: project.actuacions.service
+Descripcion: Servicio de registro de actuaciones operativas mediante Named Queries.
+Autor: Equipo SCADA
+"""
+
+def log_operator_action(equip, description, username):
+    """
+    Registra una actuacion u orden operativa consumiendo la Named Query parametrizada.
+    
+    Args:
+        equip (str): Identificador del equipo (ej. 'EDAR_BOMBA_02').
+        description (str|unicode): Detalle funcional de la orden o alarma.
+        username (str): Usuario autenticado que realiza la accion.
+        
+    Returns:
+        tuple: (bool success, unicode message)
+    """
+    logger = system.util.getLogger("SCADA.Actuacions")
+    
+    # 1. Validaciones defensivas de entrada
+    if not equip or not str(equip).strip():
+        return (False, u"El identificador de equipo es obligatorio")
+        
+    if not description or not str(description).strip():
+        return (False, u"La descripción de la actuación no puede estar vacía")
+        
+    user_str = str(username).strip() if username else "SYSTEM"
+    
+    # 2. Armado del diccionario de parametros (debe coincidir exactamente con la Named Query)
+    params = {
+        "equip": str(equip).strip(),
+        "descripcio": unicode(description).strip(),
+        "usuari": user_str
+    }
+    
+    try:
+        # Obtener el nombre del proyecto actual para ejecucion en cualquier scope
+        project_name = system.util.getProjectName()
+        
+        # 3. Invocacion de la Named Query
+        rows_affected = system.db.runNamedQuery(
+            project=project_name,
+            path="Actuacions/InsertRegistre",
+            parameters=params
+        )
+        
+        if rows_affected == 1:
+            logger.info("Actuación registrada por Named Query: {} | Equipo: {}".format(user_str, equip))
+            return (True, u"Actuación registrada correctamente")
+        else:
+            logger.warn("Named Query no insertó filas para {}".format(equip))
+            return (False, u"No se ha podido registrar la actuación en la base de datos")
+            
+    except Exception as ex:
+        logger.error("Error al ejecutar Named Query Actuacions/InsertRegistre: {}".format(str(ex)))
+        return (False, u"Error interno de comunicación con la base de datos")
+```
+
+**Paso 3: Guardar el Proyecto**
+
+1. Guardar en el Designer (**File -> Save** o `Ctrl+S`).
+
+**Paso 4: Pruebas y Validación desde la Script Console**
+
+1. Abrir la **Script Console**.
+2. Ejecutar las pruebas:
+
+```python
+print "=== VALIDACION LABORATORIO 5.2: CONSUMO DE NAMED QUERIES ==="
+
+# Caso 1: Registro nominal de maniobra de envio de consigna
+ok1, msg1 = project.actuacions.service.log_operator_action(
+    equip="EDAR_COMPRESOR_02",
+    description=u"Orden Enviar Consigna SCMX: 8.5 bar por supervisor",
+    username="laura.vidal"
+)
+print "\nCaso 1 (Nominal)       -> Exito: {} | Mensaje: {}".format(ok1, msg1)
+
+# Caso 2: Registro de alarma de proceso
+ok2, msg2 = project.actuacions.service.log_operator_action(
+    equip="LINEA_ENVASADO_01",
+    description=u"Reconocimiento manual de alarma: Parada de emergencia pulsada",
+    username="carlos.gomez"
+)
+print "Caso 2 (Alarma)        -> Exito: {} | Mensaje: {}".format(ok2, msg2)
+
+# Caso 3: Error por descripcion vacia
+ok3, msg3 = project.actuacions.service.log_operator_action(
+    equip="EDAR_BOMBA_01",
+    description=" ",
+    username="admin"
+)
+print "Caso 3 (Error Valida)  -> Exito: {} | Mensaje: {}".format(ok3, msg3)
+```
+
+**Paso 5: Salida Esperada en Consola**
+
+```
+=== VALIDACION LABORATORIO 5.2: CONSUMO DE NAMED QUERIES ===
+
+Caso 1 (Nominal)       -> Exito: True | Mensaje: Actuación registrada correctamente
+Caso 2 (Alarma)        -> Exito: True | Mensaje: Actuación registrada correctamente
+Caso 3 (Error Valida)  -> Exito: False | Mensaje: La descripción de la actuación no puede estar vacía
+```
 
 ***
 

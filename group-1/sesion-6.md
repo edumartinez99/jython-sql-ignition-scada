@@ -145,6 +145,221 @@ flowchart TD
 
 * Función probada desde la Script Console que ejecuta satisfactoriamente el cierre de lote y actualización de existencias ante datos válidos, y revierte la totalidad de los cambios en base de datos cuando se fuerza un error de stock insuficiente.
 
+
+#### 4. Paso a Paso para la Realización
+
+**Paso 1: Preparación de Tablas Transaccionales en el Sandbox (SQL)**
+
+1. En **Ignition Designer**, abrir **Tools -> Database Query Browser**.
+2. Seleccionar la conexión `SANDBOX_DB`.
+3. Ejecutar el siguiente script DDL para crear las tablas de históricos de lotes e inventario de reactivos/materias primas:
+
+```sql
+-- 1. Tabla de Historico de Lotes
+CREATE TABLE IF NOT EXISTS production_batch_history (
+    batch_code VARCHAR(50) PRIMARY KEY,
+    equip VARCHAR(100) NOT NULL,
+    units_produced INT NOT NULL,
+    closed_by VARCHAR(100) NOT NULL,
+    closed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Tabla de Inventario de Materias Primas / Reactivos
+CREATE TABLE IF NOT EXISTS raw_materials_stock (
+    material_id VARCHAR(50) PRIMARY KEY,
+    description VARCHAR(255) NOT NULL,
+    stock_qty DOUBLE PRECISION NOT NULL,
+    unit VARCHAR(20) NOT NULL
+);
+
+-- Poblado inicial de stock de prueba
+INSERT INTO raw_materials_stock (material_id, description, stock_qty, unit)
+VALUES 
+    ('REACTIVO_COAGULANTE', 'Sulfato de alúmina para EDAR', 1500.0, 'kg'),
+    ('REACTIVO_FLOCULANTE', 'Polielectrolito catiónico', 350.0, 'kg'),
+    ('ENVAS_BOTELLA_1L',     'Botella PET 1L Línea Envasado', 10000.0, 'unidades')
+ON CONFLICT (material_id) DO UPDATE 
+SET stock_qty = EXCLUDED.stock_qty;
+```
+
+**Paso 2: Creación del Módulo en Project Library**
+
+1. En el _Project Browser_, desplegar **Server Scripting -> Project Library**.
+2. Crear el script: `production.batch` (carpeta `production`, script `batch`).
+
+**Paso 3: Implementación de la Lógica Transaccional ACID**
+
+Copiar y guardar el siguiente código en `project.production.batch`:
+
+```python
+"""
+Modulo: project.production.batch
+Descripcion: Gestion transaccional atomica (ACID) de cierre de lotes y actualizacion de stock.
+Autor: Equipo SCADA
+"""
+
+def close_production_batch(batch_code, equip, units_produced, material_consumptions, username, db_conn="SANDBOX_DB"):
+    """
+    Ejecuta el cierre formal de un lote de produccion descontando stock dentro de una transaccion JDBC.
+    
+    Args:
+        batch_code (str): Codigo identificador del lote (ej. 'LOT-2026-X1').
+        equip (str): Identificador del equipo (ej. 'EDAR_BOMBA_01', 'LINEA_ENVASADO_01').
+        units_produced (int): Cantidad producida.
+        material_consumptions (list of dict): [{'material_id': 'REACTIVO_COAGULANTE', 'qty': 120.5}, ...]
+        username (str): Operador que autoriza el cierre.
+        db_conn (str): Conexion de base de datos en Ignition.
+        
+    Returns:
+        tuple: (bool success, unicode message)
+    """
+    logger = system.util.getLogger("SCADA.Transactions.Batch")
+    
+    # 1. Validaciones previas de entrada
+    if not batch_code or not equip or not username:
+        return (False, u"Parámetros de cabecera incompletos")
+        
+    if units_produced is None or int(units_produced) <= 0:
+        return (False, u"La cantidad producida debe ser superior a cero")
+        
+    if not material_consumptions or not isinstance(material_consumptions, list):
+        return (False, u"Se requiere una lista válida de consumos de materia prima")
+        
+    # 2. Iniciar transaccion JDBC con timeout de 10 segundos
+    tx_id = system.db.beginTransaction(database=db_conn, timeout=10000)
+    
+    try:
+        logger.info("Iniciando transacción [{}] para el cierre de lote: {}".format(tx_id, batch_code))
+        
+        # 3. Sentencia 1: Insercion de la cabecera del lote
+        header_sql = """
+            INSERT INTO production_batch_history (batch_code, equip, units_produced, closed_by, closed_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """
+        h_rows = system.db.runPrepUpdate(
+            header_sql, 
+            [str(batch_code), str(equip), int(units_produced), str(username)], 
+            database=db_conn, 
+            txId=tx_id
+        )
+        
+        if h_rows != 1:
+            raise Exception("No se pudo insertar la cabecera del lote en el histórico")
+            
+        # 4. Sentencias 2..N: Descuento de stock de cada materia prima
+        stock_sql = """
+            UPDATE raw_materials_stock 
+            SET stock_qty = stock_qty - ? 
+            WHERE material_id = ? AND stock_qty >= ?
+        """
+        for item in material_consumptions:
+            mat_id = item.get("material_id")
+            qty = float(item.get("qty", 0.0))
+            
+            if qty <= 0.0:
+                raise Exception("Cantidad de consumo no válida para el material: {}".format(mat_id))
+                
+            # La clausula AND stock_qty >= ? asegura que NO se descuente si no hay suficiente existencia
+            rows_updated = system.db.runPrepUpdate(
+                stock_sql, 
+                [qty, mat_id, qty], 
+                database=db_conn, 
+                txId=tx_id
+            )
+            
+            if rows_updated != 1:
+                # Disparo de excepcion que forzara el Rollback completo
+                raise Exception("Stock insuficiente o material inexistente para: {}".format(mat_id))
+                
+            # 5. Sentencia Final: Registro en auditoria de actuaciones (mismo txId)
+        audit_sql = """
+            INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """
+        audit_desc = u"Cierre de Lote {} ({:.0f} unidades) y regularización de stock".format(
+            unicode(batch_code), float(units_produced)
+        )
+        system.db.runPrepUpdate(
+            audit_sql, 
+            [str(equip), audit_desc, str(username)], 
+            database=db_conn, 
+            txId=tx_id
+        )
+        
+        # 6. Confirmacion atomica de todos los cambios
+        system.db.commitTransaction(tx_id)
+        logger.info("Transacción [{}] confirmada (COMMIT) con éxito".format(tx_id))
+        return (True, u"Lote {} cerrado y stock actualizado correctamente".format(batch_code))
+        
+    except Exception as err:
+        # Reversion inmediata de todas las sentencias ejecutadas bajo este txId
+        system.db.rollbackTransaction(tx_id)
+        err_msg = str(err)
+        logger.error("Transacción [{}] REVERTIDA (ROLLBACK) por error: {}".format(tx_id, err_msg))
+        return (False, u"Operación abortada: {}".format(err_msg))
+        
+    finally:
+        # REGLA OBLIGATORIA: Retorno incondicional de la conexion fisica al pool JDBC
+        system.db.closeTransaction(tx_id)
+```
+
+**Paso 4: Guardar el Proyecto**
+
+1. Guardar en el Designer (**File -> Save** o `Ctrl+S`).
+
+**Paso 5: Pruebas y Validación de Rollback en la Script Console**
+
+1. Abrir la **Script Console**.
+2. Ejecutar las pruebas comparando un cierre nominal contra un cierre con rotura de stock forzada:
+
+```python
+print "=== VALIDACION LABORATORIO 6.1: TRANSACCIONES ACID ==="
+
+# Caso 1: Cierre Nominal con Stock Suficiente (Exito -> COMMIT)
+consumos_validos = [
+    {"material_id": "REACTIVO_COAGULANTE", "qty": 150.0},
+    {"material_id": "REACTIVO_FLOCULANTE",  "qty": 25.0}
+]
+
+ok1, msg1 = project.production.batch.close_production_batch(
+    batch_code="LOT-2026-EDAR-01",
+    equip="EDAR_BOMBA_01",
+    units_produced=5000,
+    material_consumptions=consumos_validos,
+    username="marti.sanchez"
+)
+print "\nCaso 1 (Nominal) -> Exito: {} | Mensaje: {}".format(ok1, msg1)
+
+# Caso 2: Cierre con Stock Insuficiente (Fallo -> ROLLBACK AUTOMATICO)
+# Se solicitan 99.000 kg de floculante cuando solo quedan ~325 kg en inventario
+consumos_excesivos = [
+    {"material_id": "REACTIVO_COAGULANTE", "qty": 50.0},
+    {"material_id": "REACTIVO_FLOCULANTE",  "qty": 99000.0} # Falla y dispara Rollback
+]
+
+ok2, msg2 = project.production.batch.close_production_batch(
+    batch_code="LOT-2026-EDAR-02",
+    equip="EDAR_BOMBA_02",
+    units_produced=3000,
+    material_consumptions=consumos_excesivos,
+    username="laura.vidal"
+)
+print "Caso 2 (Rollback) -> Exito: {} | Mensaje: {}".format(ok2, msg2)
+```
+
+**Paso 6: Verificación de Integridad en Base de Datos**
+
+1.  En el **Database Query Browser**, ejecutar:
+
+    ```sql
+    -- 1. Verificar lotes registrados
+    SELECT * FROM production_batch_history;
+
+    -- 2. Verificar inventario
+    SELECT * FROM raw_materials_stock;
+    ```
+2. **Verificación crítica:** Comprobar que el lote `LOT-2026-EDAR-01` existe y su stock se descontó, mientras que el lote `LOT-2026-EDAR-02` **no aparece en la tabla y el reactivo coagulante del Caso 2 no sufrió ningún descuento**, demostrando la atomicidad absoluta de la transacción.
+
 ***
 
 ### 5. Tema 14: Script Transforms en Bindings: Buenas Prácticas y Rendimiento en Perspective
@@ -210,6 +425,139 @@ flowchart TD
 #### Resultado esperado
 
 * Script Transform operativo en una vista de Perspective que delega la lógica en `Project Library` y actualiza dinámicamente el estilo y contenido de una tarjeta de máquina según su estado operativo (producción, parada, mantenimiento, sin comunicación).
+
+
+#### 4. Paso a Paso para la Realización
+
+**Paso 1: Creación del Módulo de Transforms en Project Library**
+
+1. En el _Project Browser_, desplegar **Server Scripting -> Project Library**.
+2. Crear el script: `ui.transforms` (carpeta `ui`, script `transforms`).
+
+**Paso 2: Implementación de la Función Pura de Formateo Visual**
+
+Copiar y guardar el siguiente código en `project.ui.transforms`:
+
+```python
+"""
+Modulo: project.ui.transforms
+Descripcion: Funciones puras para Script Transforms en Perspective.
+             Cero I/O, ejecucion instantanea en memoria RAM.
+Autor: Equipo SCADA
+"""
+
+def format_equipment_status_card(raw_state_data):
+    """
+    Transforma un diccionario o valor de estado crudo en metadatos visuales para UI.
+    
+    Args:
+        raw_state_data (dict|any): Objeto que contiene {'status_code': int, 'flow_val': float, ...}
+        
+    Returns:
+        dict: Propiedades listas para enlazar a estilos, texto e iconos de Perspective.
+    """
+    # 1. Tratamiento defensivo ante estados nulos o arranque de pantalla
+    if raw_state_data is None or not isinstance(raw_state_data, dict):
+        return {
+            "status_text": "SIN COMUNICACION",
+            "bg_color": "#7f8c8d",       # Gris oscuro
+            "text_color": "#ffffff",
+            "icon_path": "material/cloud_off",
+            "blink_animation": True,
+            "badge_class": "badge-offline"
+        }
+        
+    state_code = raw_state_data.get("status_code", -1)
+    flow_val = raw_state_data.get("flow_val", 0.0)
+    
+    # 2. Mapeo de estados y estilos condicionales
+    if state_code == 1: # En Marcha / Produciendo
+        flow_str = "{:.1f} m3/h".format(flow_val) if flow_val is not None else "0.0 m3/h"
+        return {
+            "status_text": "EN PRODUCCION ({})".format(flow_str),
+            "bg_color": "#27ae60",       # Verde
+            "text_color": "#ffffff",
+            "icon_path": "material/play_circle_filled",
+            "blink_animation": False,
+            "badge_class": "badge-running"
+        }
+    elif state_code == 2: # Parada / Alarma
+        return {
+            "status_text": "PARADA DE EMERGENCIA / ALARMA",
+            "bg_color": "#e74c3c",       # Rojo
+            "text_color": "#ffffff",
+            "icon_path": "material/error",
+            "blink_animation": True,
+            "badge_class": "badge-alarm"
+        }
+    elif state_code == 3: # En Mantenimiento
+        return {
+            "status_text": "MANTENIMIENTO PREVENTIVO",
+            "bg_color": "#f39c12",       # Ambar
+            "text_color": "#000000",
+            "icon_path": "material/build",
+            "blink_animation": False,
+            "badge_class": "badge-maintenance"
+        }
+    elif state_code == 0: # En Espera / Standby
+        return {
+            "status_text": "STANDBY / EN ESPERA",
+            "bg_color": "#95a5a6",       # Gris claro
+            "text_color": "#000000",
+            "icon_path": "material/pause_circle_outline",
+            "blink_animation": False,
+            "badge_class": "badge-standby"
+        }
+    else:
+        return {
+            "status_text": "ESTADO INDEFINIDO (Código: {})".format(state_code),
+            "bg_color": "#34495e",       # Azul oscuro
+            "text_color": "#ffffff",
+            "icon_path": "material/help_outline",
+            "blink_animation": False,
+            "badge_class": "badge-unknown"
+        }
+```
+
+**Paso 3: Guardar el Proyecto**
+
+1. Guardar en el Designer (**File -> Save** o `Ctrl+S`).
+
+**Paso 4: Validación desde la Script Console**
+
+1. Abrir la **Script Console** y probar los casos posibles:
+
+```python
+print "=== VALIDACION LABORATORIO 6.2: SCRIPT TRANSFORMS ==="
+
+casos_ui = [
+    {"name": "Bomba 1 en Marcha",     "data": {"status_code": 1, "flow_val": 64.8}},
+    {"name": "Compresor en Alarma",   "data": {"status_code": 2, "flow_val": 0.0}},
+    {"name": "Decantador Mantenimiento","data": {"status_code": 3, "flow_val": 0.0}},
+    {"name": "Valvula en Standby",     "data": {"status_code": 0, "flow_val": 0.0}},
+    {"name": "Desconexion / None",    "data": None}
+]
+
+for c in casos_ui:
+    res = project.ui.transforms.format_equipment_status_card(c["data"])
+    print "Caso: {:<25} -> Texto: {:<32} | Color: {:<8} | Icon: {}".format(
+        c["name"], res["status_text"], res["bg_color"], res["icon_path"]
+    )
+```
+
+**Paso 5: Configuración en la Vista de Perspective**
+
+1. En **Perspective -> Views**, abrir cualquier vista de prueba (o crear una vista llamada `Test_Card`).
+2. Añadir un componente **Label** o **Flex Container**.
+3. En la propiedad `props.text` o `custom.cardStyle`, crear un **Tag Binding** o **Property Binding**.
+4. Añadir un **Script Transform** al binding.
+5.  Escribir **exclusivamente** esta línea en el transform:
+
+    ```python
+    # Codigo limpio en el Script Transform de Perspective
+    return project.ui.transforms.format_equipment_status_card(value)
+    ```
+6. **Verificación:** Comprobar que el componente se actualiza inmediatamente al cambiar el valor del tag de origen, sin latencia ni congelamiento visual
 
 ***
 
@@ -289,6 +637,199 @@ flowchart LR
 
 * Sistema de eventos desacoplado y funcional en Perspective donde la interacción con un componente actualiza selectivamente las propiedades de otros componentes de la vista a través del bus de mensajes.
 
+
+#### 4. Paso a Paso para la Realización
+
+**Paso 1: Creación del Módulo de Gestión de Alarmas en Project Library**
+
+1. En **Ignition Designer**, navegar a **Server Scripting -> Project Library**.
+2. Abrir o crear el módulo: `project.alarms.events` (carpeta `alarms`, script `events`).
+3. Copiar y guardar la función que procesa el reconocimiento formal de la alarma y emite la auditoría en base de datos:
+
+```python
+"""
+Modulo: project.alarms.events
+Descripcion: Logica de reconocimiento y broadcast de eventos de alarma.
+Autor: Equipo SCADA
+"""
+
+def acknowledge_equipment_alarm(alarm_id, equip, username, reason="Reconocimiento Operativo"):
+    """
+    Reconoce una alarma, registra la actuacion en base de datos y prepara el payload de difusion.
+    
+    Args:
+        alarm_id (int|str): Identificador unico de la alarma o enclavamiento.
+        equip (str): Identificador del equipo (ej. 'EDAR_BOMBA_01').
+        username (str): Usuario que reconoce la alarma.
+        reason (str): Justificacion o motivo operativo.
+        
+    Returns:
+        tuple: (bool success, dict payload_or_error)
+    """
+    logger = system.util.getLogger("SCADA.Alarms.Events")
+    
+    if not alarm_id or not equip:
+        return (False, {"error": u"Identificador de alarma o equipo no válido"})
+        
+    user_str = str(username) if username else "SYSTEM"
+    
+    try:
+        # 1. Registrar la actuacion en la tabla ins_Registre_Actuacions (SANDBOX_DB)
+        audit_desc = u"Alarma [{}] reconocida para {}. Motivo: {}".format(
+            unicode(alarm_id), unicode(equip), unicode(reason)
+        )
+        sql = """
+            INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """
+        system.db.runPrepUpdate(sql, [str(equip), audit_desc, user_str], database="SANDBOX_DB")
+        
+        logger.info("Alarma {} reconocida por {} en el equipo {}".format(alarm_id, user_str, equip))
+        
+        # 2. Retornar payload para el Message Handler
+        broadcast_payload = {
+            "alarm_id": alarm_id,
+            "equip": equip,
+            "ack_by": user_str,
+            "ack_timestamp": system.date.format(system.date.now(), "dd/MM/yyyy HH:mm:ss")
+        }
+        return (True, broadcast_payload)
+        
+    except Exception as ex:
+        logger.error("Error al reconocer alarma {}: {}".format(alarm_id, str(ex)))
+        return (False, {"error": u"Error interno de base de datos"})
+```
+
+**Paso 2: Guardar el Proyecto**
+
+1. En el menú superior, guardar el proyecto (**File -> Save** o `Ctrl+S`).
+
+**Paso 3: Configuración del Message Handler Receptor en Perspective**
+
+1. En el **Project Browser**, navegar a **Perspective -> Views** y abrir la vista principal de supervisión (o crear una vista llamada `Supervisio_Alarmes`).
+2. Seleccionar el contenedor raíz (_Root Container_) o la tabla principal de alarmas.
+3. En la esquina superior derecha del panel de componentes, hacer clic derecho sobre el componente receptor y seleccionar **Configure Scripts...**.
+4. En la sección **Message Handlers** (menú lateral izquierdo):
+   * Hacer clic en el botón `+` para añadir un nuevo handler.
+   * **Message Type:** Nombrarlo exactamente: `OnAlarmAcknowledged`.
+   * **Listen Scopes:** Marcar las casillas **Session** y **Page**.
+5. En el editor de script del handler, pegar el siguiente código:
+
+```python
+# Script dentro del Message Handler 'OnAlarmAcknowledged'
+# Parametros disponibles por defecto: self, payload
+
+logger = system.util.getLogger("SCADA.UI.MessageReceiver")
+
+alarm_id = payload.get("alarm_id")
+equip = payload.get("equip")
+ack_by = payload.get("ack_by")
+
+logger.info("Mensaje recibido en el receptor UI: Alarma {} reconocida por {}".format(alarm_id, ack_by))
+
+# Refrescar de forma desacoplada el binding de la tabla o contenedor sin recargar la pagina
+# Esto reemplaza el patron fragil self.parent.parent.getChild(...)
+if hasattr(self, "refreshBinding"):
+    self.refreshBinding("props.data")
+    self.refreshBinding("props.instances")
+```
+
+```mermaid
+flowchart LR
+    subgraph Componente_Emisor [Emisor: Boton en Modal / Popup]
+        Click[onActionPerformed] --> Service[project.alarms.events.acknowledge_equipment_alarm]
+        Service --> SendMsg[system.perspective.sendMessage: OnAlarmAcknowledged]
+    end
+
+    subgraph Bus_Perspective [Bus de Mensajeria de Ignition: Scope Page / Session]
+        SendMsg --> Router[Enrutador de Mensajes]
+    end
+
+    subgraph Componentes_Receptores [Receptores: Message Handlers]
+        Router --> TableHandler[Tabla Principal: Refresca Datos]
+        Router --> BadgeHandler[Indicador KPI: Actualiza Contador]
+        Router --> BreadcrumbHandler[Cabecera: Actualiza Estado]
+    end
+```
+
+**Paso 4: Configuración del Script Emisor en el Botón (o Componente Disparador)**
+
+1. En la misma vista (o en un popup modal), añadir un botón llamado **btn\_Reconocer**.
+2. Hacer clic derecho sobre el botón -> **Configure Actions...**.
+3. En **Events -> onActionPerformed**, seleccionar la acción **Script**.
+4. Pegar el siguiente código:
+
+```python
+# Evento onActionPerformed en el boton de reconocimiento
+
+equip = self.view.params.equip if hasattr(self.view.params, "equip") else "EDAR_BOMBA_01"
+alarm_id = 104 # ID de la alarma seleccionada
+user = self.session.props.auth.user.userName if hasattr(self.session.props.auth, "user") else "marti.sanchez"
+
+# 1. Ejecutar la logica de negocio en Project Library
+ok, result = project.alarms.events.acknowledge_equipment_alarm(
+    alarm_id=alarm_id,
+    equip=equip,
+    username=user,
+    reason="Parada verificada por operador de campo"
+)
+
+if ok:
+    # 2. Emitir mensaje desacoplado a toda la pagina activa
+    # El emisor no necesita conocer la ruta ni jerarquia de la tabla receptora
+    system.perspective.sendMessage(
+        messageHandler="OnAlarmAcknowledged",
+        payload=result,
+        scope="page"
+    )
+    
+    # 3. Notificacion visual amigable al operador
+    system.perspective.openPopup(
+        id="ack_confirm_popup",
+        view="Popups/ConfirmNotification",
+        params={"msg": "Alarma reconocida correctamente"},
+        showCloseIcon=True
+    )
+else:
+    logger = system.util.getLogger("SCADA.UI.Button")
+    logger.warn("Error al reconocer alarma: {}".format(result.get("error")))
+```
+
+**Paso 5: Simulación y Validación desde la Script Console**
+
+Para verificar la lógica de negocio y la emisión del mensaje antes de probar en el navegador web:
+
+1. Abrir la **Script Console** (**Tools -> Script Console**).
+2. Ejecutar la prueba:
+
+```python
+print "=== VALIDACION LABORATORIO 6.3: DESACOPLAMIENTO DE EVENTOS ==="
+
+# Ejecutar el servicio simulando el evento del boton
+ok, payload = project.alarms.events.acknowledge_equipment_alarm(
+    alarm_id=205,
+    equip="EDAR_COMPRESOR_01",
+    username="laura.vidal",
+    reason="Nivel de aceite restablecido"
+)
+
+print "Servicio ejecutado con exito:", ok
+print "Payload generado para el bus de mensajes:"
+for k, v in payload.items():
+    print " - {}: {}".format(k, v)
+```
+
+**Paso 6: Salida Esperada en Consola**
+
+```
+=== VALIDACION LABORATORIO 6.3: DESACOPLAMIENTO DE EVENTOS ===
+Servicio ejecutado con exito: True
+Payload generado para el bus de mensajes:
+ - alarm_id: 205
+ - equip: EDAR_COMPRESOR_01
+ - ack_by: laura.vidal
+ - ack_timestamp: 26/08/2026 19:35:12
+```
 ***
 
 ### 9. Test de Conceptos de la Sesión 6

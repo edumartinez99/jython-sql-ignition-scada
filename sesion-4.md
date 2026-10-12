@@ -107,7 +107,7 @@ description: Tratamiento Profesional de Errores, Logging y SQL Esencial Industri
 
 * Módulo creado y verificado desde la Script Console que procesa llamadas nominales y llamadas con fallos forzados (tags inválidos, errores de tipo), comprobando la emisión de trazas formateadas en el visor de logs del Gateway y la entrega de respuestas limpias hacia la consola.
 
-
+#### 4. Paso a Paso para la Realización
 
 **Paso 1: Creación del Módulo en Project Library**
 
@@ -341,6 +341,8 @@ flowchart LR
 #### Resultado esperado
 
 * Consulta SQL validada en el sandbox de base de datos que agrupa por línea, máquina y turno, y script de prueba en consola que recorre el `Dataset` resultante mostrando un informe formateado de producción y calidad por equipo.
+
+#### 4. Paso a Paso para la Realización
 
 **Paso 1: Verificación de la Consulta en el Database Query Browser**
 
