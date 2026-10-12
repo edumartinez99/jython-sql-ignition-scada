@@ -107,6 +107,138 @@ description: Tratamiento Profesional de Errores, Logging y SQL Esencial Industri
 
 * Módulo creado y verificado desde la Script Console que procesa llamadas nominales y llamadas con fallos forzados (tags inválidos, errores de tipo), comprobando la emisión de trazas formateadas en el visor de logs del Gateway y la entrega de respuestas limpias hacia la consola.
 
+
+
+**Paso 1: Creación del Módulo en Project Library**
+
+1. En el panel izquierdo de **Ignition Designer** (_Project Browser_), desplegar **Server Scripting -> Project Library**.
+2. Hacer clic derecho sobre **Project Library**, seleccionar **New Script** y nombrarlo: `util.logging` (carpeta `util`, script `logging`).
+
+**Paso 2: Implementación de la Función `safe_execution`**
+
+En el editor del script `project.util.logging`, copiar y guardar el siguiente código:
+
+```python
+"""
+Modulo: project.util.logging
+Descripcion: Wrapper defensivo de ejecucion con captura dual de excepciones
+             (Jython + Java) y registro contextual en el Gateway.
+Autor: Equipo SCADA
+"""
+from java.lang import Exception as JavaException
+from java.sql import SQLException
+
+# Logger centralizado del proyecto SCADA
+LOGGER = system.util.getLogger("SCADA.Core")
+
+def safe_execution(func_name, context_info, callable_func, *args, **kwargs):
+    """
+    Ejecuta una funcion de forma protegida, capturando excepciones de Jython y Java
+    y emitiendo logs estructurados en el Gateway.
+    
+    Args:
+        func_name (str): Nombre identificativo de la operacion (ej. 'TagWrite_Speed').
+        context_info (dict): Diccionario con contexto (user, equip, action, etc.).
+        callable_func (callable): Puntero a la funcion a ejecutar.
+        *args, **kwargs: Argumentos posicionales y nombrados para callable_func.
+        
+    Returns:
+        tuple: (bool success, any result_or_error_message)
+    """
+    # 1. Construccion del encabezado contextual
+    ctx_items = []
+    if isinstance(context_info, dict):
+        for k, v in sorted(context_info.items()):
+            ctx_items.append("{}={}".format(k, v))
+        ctx_str = " | ".join(ctx_items)
+    else:
+        ctx_str = str(context_info)
+        
+    try:
+        LOGGER.debug("[{}] Iniciando ejecucion. Contexto: [{}]".format(func_name, ctx_str))
+        
+        # 2. Invocacion de la funcion objetivo
+        result = callable_func(*args, **kwargs)
+        
+        LOGGER.debug("[{}] Ejecucion completada con exito. Contexto: [{}]".format(func_name, ctx_str))
+        return (True, result)
+        
+    except (TypeError, ValueError, KeyError, IndexError) as py_err:
+        # Errores propios de la sintaxis y tipos de Jython
+        err_detail = "Error de tipos/datos en [{}]: {}".format(func_name, str(py_err))
+        LOGGER.error("{} | Contexto: [{}]".format(err_detail, ctx_str))
+        return (False, u"Error en los parámetros o datos de procesamiento")
+        
+    except SQLException as sql_err:
+        # Errores especificos del motor de base de datos (JDBC)
+        err_detail = "Error SQL/JDBC en [{}]: {}".format(func_name, sql_err.getMessage())
+        LOGGER.error("{} | Contexto: [{}]".format(err_detail, ctx_str), sql_err)
+        return (False, u"Error de comunicación o transacción con la base de datos")
+        
+    except JavaException as java_err:
+        # Errores genericos de la JVM / drivers de Ignition
+        err_detail = "Error Java/Gateway en [{}]: {}".format(func_name, java_err.getMessage())
+        LOGGER.error("{} | Contexto: [{}]".format(err_detail, ctx_str), java_err)
+        return (False, u"Fallo de comunicación con el sistema industrial")
+        
+    except Exception as general_err:
+        # Fallback general de Python
+        err_detail = "Error no controlado en [{}]: {}".format(func_name, str(general_err))
+        LOGGER.error("{} | Contexto: [{}]".format(err_detail, ctx_str))
+        return (False, u"Error interno no controlado")
+```
+
+**Paso 3: Guardar el Proyecto**
+
+1. En el menú superior, hacer clic en **File -> Save** (o `Ctrl+S` / `Cmd+S`).
+
+**Paso 4: Pruebas y Validación desde la Script Console**
+
+1. Abrir la **Script Console** (**Tools -> Script Console**).
+2. Probar la función simulando operaciones nominales y fallos reales de planta:
+
+```python
+print "=== VALIDACION LABORATORIO 4.1: LOGGING CONTEXTUAL ==="
+
+# 1. Definir funciones auxiliares de prueba
+def simular_escritura_consigna(tag_path, valor):
+    if "INVALID" in tag_path:
+        raise ValueError("Ruta de tag inexistente en el provider")
+    return u"Consigna {:.2f} escrita correctamente en {}".format(float(valor), tag_path)
+
+def simular_calculo_con_error(x, y):
+    # Forzar error de tipo
+    return x + y
+
+# 2. Caso Nominal (Exito)
+ctx_1 = {"user": "marti.sanchez", "equip": "EDAR_BOMBA_01", "action": "SET_SPEED"}
+ok1, res1 = project.util.logging.safe_execution(
+    "SetSpeed_Action", ctx_1, simular_escritura_consigna, "[default]EDAR/EDAR_BOMBA_01/SCFL", 45.5
+)
+print "\nCaso 1 (Nominal) -> Exito: {} | Retorno: {}".format(ok1, res1)
+
+# 2. Caso Error de Validacion (Captura Jython + Log en Gateway)
+ctx_2 = {"user": "operador_noche", "equip": "EDAR_COMPRESOR_02", "action": "SET_PRESSURE"}
+ok2, res2 = project.util.logging.safe_execution(
+    "SetPressure_Action", ctx_2, simular_escritura_consigna, "[default]EDAR/INVALID_PATH/SCMX", 8.2
+)
+print "Caso 2 (Tag Invalido) -> Exito: {} | Mensaje Usuario: {}".format(ok2, res2)
+
+# 3. Caso Error de Tipos (Captura TypeError)
+ctx_3 = {"user": "admin", "equip": "DECANTADOR_01", "action": "CALC_INDEX"}
+ok3, res3 = project.util.logging.safe_execution(
+    "CalcIndex_Action", ctx_3, simular_calculo_con_error, "Texto", 100
+)
+print "Caso 3 (Error Tipos)  -> Exito: {} | Mensaje Usuario: {}".format(ok3, res3)
+```
+
+**Paso 5: Inspección en el Gateway**
+
+1. Abrir el navegador web y acceder a la página de administración del Gateway (`http://localhost:8088`).
+2. Navegar a **Status -> Diagnostics -> Logs**.
+3. Filtrar por el nombre del logger: `SCADA.Core`.
+4. **Verificación:** Comprobar que aparecen los registros de error con el contexto formateado `user=... | equip=... | action=...` y el detalle técnico del error.
+
 ***
 
 ### 4. Tema 9: SQL Esencial para Scripting Industrial y Cálculo de KPIs
@@ -209,6 +341,128 @@ flowchart LR
 #### Resultado esperado
 
 * Consulta SQL validada en el sandbox de base de datos que agrupa por línea, máquina y turno, y script de prueba en consola que recorre el `Dataset` resultante mostrando un informe formateado de producción y calidad por equipo.
+
+**Paso 1: Verificación de la Consulta en el Database Query Browser**
+
+1. En **Ignition Designer**, ir a **Tools -> Database Query Browser**.
+2. Seleccionar la conexión de base de datos sandbox (por defecto `SANDBOX_DB` o la conexión configurada en el curso).
+3. Pegar y ejecutar la siguiente consulta SQL analítica:
+
+```sql
+SELECT 
+    te.tagpath,
+    COUNT(d.t_stamp) AS total_muestras,
+    ROUND(AVG(d.floatvalue)::numeric, 2) AS valor_medio,
+    ROUND(MIN(d.floatvalue)::numeric, 2) AS valor_minimo,
+    ROUND(MAX(d.floatvalue)::numeric, 2) AS valor_maximo,
+    CASE 
+        WHEN AVG(d.floatvalue) > 75.0 THEN 'ALTA_CARGA'
+        WHEN AVG(d.floatvalue) < 25.0 THEN 'BAJA_CARGA'
+        ELSE 'NOMINAL'
+    END AS estado_operativo,
+    CASE 
+        WHEN AVG(d.floatvalue) > 75.0 THEN '#e74c3c' -- Rojo alerta
+        WHEN AVG(d.floatvalue) < 25.0 THEN '#f39c12' -- Ambar aviso
+        ELSE '#2ecc71'                               -- Verde optimo
+    END AS color_hex
+FROM sqlt_data_1_2026_10 d
+INNER JOIN sqlth_te te ON d.tagid = te.id
+WHERE d.floatvalue IS NOT NULL
+GROUP BY te.tagpath
+ORDER BY valor_medio DESC;
+```
+
+**Paso 2: Implementación del Consumo en la Script Console**
+
+1. Abrir la **Script Console**.
+2. Limpiar el editor y pegar el script que ejecuta la consulta y formatea el reporte de planta:
+
+```python
+"""
+Script de Consumo Analitico de Telemetria Historica.
+Ejecuta la consulta agregada en BD y procesa el reporte en Jython.
+"""
+
+sql_query = """
+SELECT 
+    te.tagpath,
+    COUNT(d.t_stamp) AS total_muestras,
+    ROUND(AVG(d.floatvalue)::numeric, 2) AS valor_medio,
+    ROUND(MIN(d.floatvalue)::numeric, 2) AS valor_minimo,
+    ROUND(MAX(d.floatvalue)::numeric, 2) AS valor_maximo,
+    CASE 
+        WHEN AVG(d.floatvalue) > 75.0 THEN 'ALTA_CARGA'
+        WHEN AVG(d.floatvalue) < 25.0 THEN 'BAJA_CARGA'
+        ELSE 'NOMINAL'
+    END AS estado_operativo,
+    CASE 
+        WHEN AVG(d.floatvalue) > 75.0 THEN '#e74c3c'
+        WHEN AVG(d.floatvalue) < 25.0 THEN '#f39c12'
+        ELSE '#2ecc71'
+    END AS color_hex
+FROM sqlt_data_1_2026_10 d
+INNER JOIN sqlth_te te ON d.tagid = te.id
+WHERE d.floatvalue IS NOT NULL
+GROUP BY te.tagpath
+ORDER BY valor_medio DESC
+"""
+
+try:
+    # 1. Ejecucion de la consulta (ajustar database si el nombre de conexion difiere)
+    db_conn = "SANDBOX_DB"
+    dataset = system.db.runQuery(sql_query, database=db_conn)
+    
+    # 2. Conversion a PyDataSet para iteracion segura
+    pyds = system.dataset.toPyDataSet(dataset)
+    
+    print "=== REPORTE ANALITICO DE TELEMETRIA (OCTUBRE 2026) ==="
+    print "Total variables analizadas: {}".format(len(pyds))
+    print "-" * 95
+    print "{:<32} | {:<8} | {:<7} | {:<7} | {:<7} | {:<12} | {:<8}".format(
+        "TAG PATH", "MUESTRAS", "MEDIA", "MIN", "MAX", "ESTADO", "COLOR"
+    )
+    print "-" * 95
+    
+    for row in pyds:
+        tag_short = row["tagpath"].replace("[default]EDAR/", "")
+        print "{:<32} | {:<8} | {:<7} | {:<7} | {:<7} | {:<12} | {:<8}".format(
+            tag_short,
+            row["total_muestras"],
+            row["valor_medio"],
+            row["valor_minimo"],
+            row["valor_maximo"],
+            row["estado_operativo"],
+            row["color_hex"]
+        )
+    print "-" * 95
+
+except Exception as e:
+    print "Error al ejecutar la consulta analitica:", str(e)
+```
+
+**Paso 3: Ejecución y Validación**
+
+1. Pulsar **Execute**.
+2. **Salida esperada:**
+
+```
+=== REPORTE ANALITICO DE TELEMETRIA (OCTUBRE 2026) ===
+Total variables analizadas: 10
+-----------------------------------------------------------------------------------------------
+TAG PATH                         | MUESTRAS | MEDIA   | MIN     | MAX     | ESTADO       | COLOR   
+-----------------------------------------------------------------------------------------------
+EDAR_BOMBA_01/SCFL               | 300      | 52.84   | 10.15   | 94.88   | NOMINAL      | #2ecc71 
+EDAR_COMPRESOR_02/SCMX           | 300      | 51.90   | 10.50   | 94.20   | NOMINAL      | #2ecc71 
+EDAR_BOMBA_02/SCFL               | 300      | 50.45   | 11.20   | 93.10   | NOMINAL      | #2ecc71 
+DECANTADOR_01/SCFL               | 300      | 49.80   | 10.05   | 94.90   | NOMINAL      | #2ecc71 
+EDAR_COMPRESOR_01/SCFL           | 300      | 48.60   | 10.80   | 92.40   | NOMINAL      | #2ecc71 
+VALVULA_RECIRC_01/SCFL           | 300      | 47.10   | 12.00   | 91.50   | NOMINAL      | #2ecc71 
+EDAR_BOMBA_01/SCMX               | 300      | 46.75   | 10.30   | 93.80   | NOMINAL      | #2ecc71 
+EDAR_BOMBA_02/SCMX               | 300      | 45.90   | 11.40   | 90.70   | NOMINAL      | #2ecc71 
+EDAR_BOMBA_01/SFOR               | 300      | 44.30   | 10.90   | 89.60   | NOMINAL      | #2ecc71 
+EDAR_BOMBA_01/ESIM               | 300      | 43.15   | 10.10   | 88.50   | NOMINAL      | #2ecc71 
+-----------------------------------------------------------------------------------------------
+```
 
 ***
 
