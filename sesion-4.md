@@ -212,21 +212,21 @@ def simular_calculo_con_error(x, y):
 
 # 2. Caso Nominal (Exito)
 ctx_1 = {"user": "marti.sanchez", "equip": "EDAR_BOMBA_01", "action": "SET_SPEED"}
-ok1, res1 = project.util.logging.safe_execution(
+ok1, res1 = util.logging.safe_execution(
     "SetSpeed_Action", ctx_1, simular_escritura_consigna, "[default]EDAR/EDAR_BOMBA_01/SCFL", 45.5
 )
 print "\nCaso 1 (Nominal) -> Exito: {} | Retorno: {}".format(ok1, res1)
 
 # 2. Caso Error de Validacion (Captura Jython + Log en Gateway)
 ctx_2 = {"user": "operador_noche", "equip": "EDAR_COMPRESOR_02", "action": "SET_PRESSURE"}
-ok2, res2 = project.util.logging.safe_execution(
+ok2, res2 = util.logging.safe_execution(
     "SetPressure_Action", ctx_2, simular_escritura_consigna, "[default]EDAR/INVALID_PATH/SCMX", 8.2
 )
 print "Caso 2 (Tag Invalido) -> Exito: {} | Mensaje Usuario: {}".format(ok2, res2)
 
 # 3. Caso Error de Tipos (Captura TypeError)
 ctx_3 = {"user": "admin", "equip": "DECANTADOR_01", "action": "CALC_INDEX"}
-ok3, res3 = project.util.logging.safe_execution(
+ok3, res3 = util.logging.safe_execution(
     "CalcIndex_Action", ctx_3, simular_calculo_con_error, "Texto", 100
 )
 print "Caso 3 (Error Tipos)  -> Exito: {} | Mensaje Usuario: {}".format(ok3, res3)
@@ -411,7 +411,7 @@ ORDER BY valor_medio DESC
 
 try:
     # 1. Ejecucion de la consulta (ajustar database si el nombre de conexion difiere)
-    db_conn = "SANDBOX_DB"
+    db_conn = "DB_Admin"
     dataset = system.db.runQuery(sql_query, database=db_conn)
     
     # 2. Conversion a PyDataSet para iteracion segura
