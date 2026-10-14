@@ -689,9 +689,9 @@ flowchart LR
     end
 
     subgraph Receptores [Componentes Receptores: Message Handlers]
-        Router --> Table[Tabla Principal: refreshBinding('props.data')]
-        Router --> TabCont[TabContainer: refreshBinding('props.tabs')]
-        Router --> Badge[Indicador KPI: refreshBinding('props.text')]
+        Router --> Table["Tabla Principal: refreshBinding('props.data')"]
+        Router --> TabCont["TabContainer: refreshBinding('props.tabs')"]
+        Router --> Badge["Indicador KPI: refreshBinding('props.text')"]
     end
 ```
 

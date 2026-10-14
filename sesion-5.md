@@ -468,16 +468,16 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    subgraph Designer_NamedQuery [Named Query: Actuacions/InsertRegistre]
-        Param1[:equip (Value Parameter)]
-        Param2[:descripcio (Value Parameter)]
-        Param3[:usuari (Value Parameter)]
-        SQLTemplate[INSERT INTO ins_Registre_Actuacions VALUES :equip, :descripcio, :usuari]
+    subgraph Designer_NamedQuery ["Named Query: Actuacions/InsertRegistre"]
+        Param1[":equip (Value Parameter)"]
+        Param2[":descripcio (Value Parameter)"]
+        Param3[":usuari (Value Parameter)"]
+        SQLTemplate["INSERT INTO ins_Registre_Actuacions VALUES :equip, :descripcio, :usuari"]
     end
 
-    subgraph Base_Datos [Motor PostgreSQL: SANDBOX_DB]
-        PreparedStatement[PreparedStatement Nativo JDBC: Inmune a SQLi]
-        TableAudit[(ins_Registre_Actuacions)]
+    subgraph Base_Datos ["Motor PostgreSQL: SANDBOX_DB"]
+        PreparedStatement["PreparedStatement Nativo JDBC: Inmune a SQLi"]
+        TableAudit[("ins_Registre_Actuacions")]
         PreparedStatement --> TableAudit
     end
 
