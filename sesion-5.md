@@ -37,9 +37,9 @@ description: Escrituras Seguras, Auditoría y Named Queries Parametrizadas
 
 * **Peligros de la concatenación de texto:**
   * Unir cadenas con el operador `+` (`"WHERE equip = '" + equip + "'"`) es una de las mayores vulnerabilidades en sistemas industriales.
-  * *Inyección accidental:* Caracteres especiales introducidos por operarios (ej. comillas simples en observaciones como `"Válvula 2" no cierra'`) rompen la gramática SQL y abortan la ejecución.
-  * *Inconsistencia de fechas:* Formatos regionales de fecha (`DD/MM/YYYY` vs `YYYY-MM-DD`) provocan desajustes temporales o rechazos en el motor.
-  * *Riesgo en dispositivos externos:* Entradas procedentes de lectores de códigos de barras, escáneres RFID o APIs externas pueden inyectar fragmentos destructivos (`BOMBA_01' OR '1'='1`).
+  * _Inyección accidental:_ Caracteres especiales introducidos por operarios (ej. comillas simples en observaciones como `"Válvula 2" no cierra'`) rompen la gramática SQL y abortan la ejecución.
+  * _Inconsistencia de fechas:_ Formatos regionales de fecha (`DD/MM/YYYY` vs `YYYY-MM-DD`) provocan desajustes temporales o rechazos en el motor.
+  * _Riesgo en dispositivos externos:_ Entradas procedentes de lectores de códigos de barras, escáneres RFID o APIs externas pueden inyectar fragmentos destructivos (`BOMBA_01' OR '1'='1`).
 * **Obligatoriedad de parámetros tipados (`PreparedStatement`):**
   * El estándar industrial exige el uso estricto de `system.db.runPrepUpdate` o Named Queries parametrizadas.
   * La consulta se envía con marcadores de posición (`?`), congelando la estructura sintáctica en el motor de base de datos.
@@ -53,33 +53,35 @@ description: Escrituras Seguras, Auditoría y Named Queries Parametrizadas
     * `rows_affected == 0`: El equipo no existe o está inactivo. Fallo silencioso; la máquina física sigue con la consigna antigua.
     * `rows_affected == 1`: **Único resultado admisible** en operaciones sobre un activo unitario.
     * `rows_affected > 1`: Violación crítica de unicidad; el `WHERE` afectó a múltiples máquinas por error.
-  * *Patrón defensivo:*
-    ```python
-    rows_affected = system.db.runPrepUpdate(update_sql, [new_sp, equip_id], database="SANDBOX_DB")
-    if rows_affected != 1:
-        logger.warn("Inconsistencia en actualización: {} filas afectadas para equipo {}".format(rows_affected, equip_id))
-        return (False, u"Error: no se modificó la consigna esperada")
-    ```
-* **Borrado Físico (`DELETE FROM`) vs. Borrado Lógico (*Soft Delete*):**
-  * *La regla de planta:* **En un SCADA nunca se borra nada**. El borrado físico destruye la integridad referencial histórica y deja huérfanos millones de registros de telemetría y alarmas en el Historian (regulaciones ISA-95, GAMP5, FDA 21 CFR Part 11).
-  * *Implementación de baja lógica:* Inclusión de columnas de control `is_active` (`BOOLEAN`), `updated_by` (`VARCHAR`) y `last_updated` (`TIMESTAMP`).
+  *   _Patrón defensivo:_
+
+      ```python
+      rows_affected = system.db.runPrepUpdate(update_sql, [new_sp, equip_id], database="SANDBOX_DB")
+      if rows_affected != 1:
+          logger.warn("Inconsistencia en actualización: {} filas afectadas para equipo {}".format(rows_affected, equip_id))
+          return (False, u"Error: no se modificó la consigna esperada")
+      ```
+* **Borrado Físico (`DELETE FROM`) vs. Borrado Lógico (**_**Soft Delete**_**):**
+  * _La regla de planta:_ **En un SCADA nunca se borra nada**. El borrado físico destruye la integridad referencial histórica y deja huérfanos millones de registros de telemetría y alarmas en el Historian (regulaciones ISA-95, GAMP5, FDA 21 CFR Part 11).
+  * _Implementación de baja lógica:_ Inclusión de columnas de control `is_active` (`BOOLEAN`), `updated_by` (`VARCHAR`) y `last_updated` (`TIMESTAMP`).
   * Desactivación mediante actualización: `UPDATE machine_setpoints SET is_active = FALSE, updated_by = ?, last_updated = CURRENT_TIMESTAMP WHERE equip = ? AND is_active = TRUE;`.
   * Los selectores visuales y consultas operativas filtran siempre por activos: `WHERE is_active = TRUE`.
 
 **3. Trazabilidad y Auditoría Canónica de Operaciones Sensibles**
 
-* **Registro sistemático de cambios de consigna (*setpoints*), fórmulas de recetas y anulaciones manuales.**
-* **Las 5 preguntas obligatorias de la pista de auditoría (*Audit Trail*):**
-  * *Quién:* Usuario autenticado en la sesión de Ignition (`username`).
-  * *Cuándo:* Marca temporal oficial del servidor de base de datos (`CURRENT_TIMESTAMP`), evitando desincronizaciones entre relojes de clientes o husos horarios.
-  * *Dónde:* Identificador físico del equipo o señal (`equip`).
-  * *Qué:* Parámetro alterado, valor anterior y valor nuevo con sus unidades de ingeniería.
-  * *Por qué:* Justificación operativa obligatoria (validación mínima de longitud, ej. `len(reason.strip()) >= 5`).
-* **Estructura canónica de la tabla de auditoría (`ins_Registre_Actuacions`):**
-  ```sql
-  INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
-  VALUES (?, ?, ?, CURRENT_TIMESTAMP);
-  ```
+* **Registro sistemático de cambios de consigna (**_**setpoints**_**), fórmulas de recetas y anulaciones manuales.**
+* **Las 5 preguntas obligatorias de la pista de auditoría (**_**Audit Trail**_**):**
+  * _Quién:_ Usuario autenticado en la sesión de Ignition (`username`).
+  * _Cuándo:_ Marca temporal oficial del servidor de base de datos (`CURRENT_TIMESTAMP`), evitando desincronizaciones entre relojes de clientes o husos horarios.
+  * _Dónde:_ Identificador físico del equipo o señal (`equip`).
+  * _Qué:_ Parámetro alterado, valor anterior y valor nuevo con sus unidades de ingeniería.
+  * _Por qué:_ Justificación operativa obligatoria (validación mínima de longitud, ej. `len(reason.strip()) >= 5`).
+*   **Estructura canónica de la tabla de auditoría (`ins_Registre_Actuacions`):**
+
+    ```sql
+    INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP);
+    ```
 
 ```mermaid
 flowchart TD
@@ -114,8 +116,6 @@ flowchart TD
 #### Resultado esperado
 
 * Función verificada en la Script Console que procesa modificaciones nominales de consignas, rechaza valores fuera de rango físico o solicitudes sin motivo justificado, e inserta la correspondiente traza de auditoría en la base de datos sandbox.
-
-
 
 #### 4. Paso a Paso para la Realización
 
@@ -295,7 +295,7 @@ def soft_delete_setpoint(equip, username, reason, db_conn="SANDBOX_DB"):
 print "=== VALIDACION LABORATORIO 5.1: ESCRITURAS DEFENSIVAS Y AUDITORIA ==="
 
 # Caso 1: Modificacion nominal de caudal en EDAR_BOMBA_01 (45 -> 62.5 m3/h)
-ok1, msg1 = project.setpoints.service.update_setpoint_with_audit(
+ok1, msg1 = setpoints.service.update_setpoint_with_audit(
     equip="EDAR_BOMBA_01",
     param_name="flow_sp",
     new_value=62.5,
@@ -305,7 +305,7 @@ ok1, msg1 = project.setpoints.service.update_setpoint_with_audit(
 print "\nCaso 1 (Nominal)     -> Exito: {} | Mensaje: {}".format(ok1, msg1)
 
 # Caso 2: Rechazo por valor fuera de rango fisico (250 m3/h > max 150 m3/h)
-ok2, msg2 = project.setpoints.service.update_setpoint_with_audit(
+ok2, msg2 = setpoints.service.update_setpoint_with_audit(
     equip="EDAR_BOMBA_01",
     param_name="flow_sp",
     new_value=250.0,
@@ -315,7 +315,7 @@ ok2, msg2 = project.setpoints.service.update_setpoint_with_audit(
 print "Caso 2 (Fuera Rango) -> Exito: {} | Mensaje: {}".format(ok2, msg2)
 
 # Caso 3: Rechazo por falta de justificacion (motivo vacio)
-ok3, msg3 = project.setpoints.service.update_setpoint_with_audit(
+ok3, msg3 = setpoints.service.update_setpoint_with_audit(
     equip="EDAR_COMPRESOR_01",
     param_name="pressure_sp",
     new_value=7.0,
@@ -325,7 +325,7 @@ ok3, msg3 = project.setpoints.service.update_setpoint_with_audit(
 print "Caso 3 (Sin Motivo)  -> Exito: {} | Mensaje: {}".format(ok3, msg3)
 
 # Caso 4: Borrado logico de VALVULA_RECIRC_01
-ok4, msg4 = project.setpoints.service.soft_delete_setpoint(
+ok4, msg4 = setpoints.service.soft_delete_setpoint(
     equip="VALVULA_RECIRC_01",
     username="mantenimiento_01",
     reason="Mantenimiento preventivo anual - Válvula fuera de servicio"
@@ -359,9 +359,9 @@ print "Caso 4 (Soft Delete) -> Exito: {} | Mensaje: {}".format(ok4, msg4)
 
 * **Centralización del código SQL en el árbol del proyecto (`Project Browser -> Named Queries`):**
   * Desacoplamiento total del SQL frente a componentes visuales y scripts (patrón Repository / DAO). Evita el antipatrón del "SQL disperso" en botones y bindings.
-  * *Entorno de pruebas integrado (Testing Tab):* Permite ejecutar la consulta dentro del Designer con parámetros reales antes de enlazarla a pantallas o scripts.
-  * *Caché en memoria RAM del Gateway:* TTL configurable para reducir drásticamente la carga sobre el motor SQL en consultas de alta concurrencia (ej. catálogo de recetas).
-  * *Control de acceso por roles (Role-Based Permissions):* Restricción de consultas sensibles a perfiles autorizados (`Supervisor`, `DirectorPlanta`).
+  * _Entorno de pruebas integrado (Testing Tab):_ Permite ejecutar la consulta dentro del Designer con parámetros reales antes de enlazarla a pantallas o scripts.
+  * _Caché en memoria RAM del Gateway:_ TTL configurable para reducir drásticamente la carga sobre el motor SQL en consultas de alta concurrencia (ej. catálogo de recetas).
+  * _Control de acceso por roles (Role-Based Permissions):_ Restricción de consultas sensibles a perfiles autorizados (`Supervisor`, `DirectorPlanta`).
 * **Estructuración jerárquica por dominios funcionales:**
   * Organización modular en carpetas por área de planta (`Production/`, `Maintenance/`, `Quality/`, `Audit/`, `Actuacions/`).
 
@@ -369,7 +369,7 @@ print "Caso 4 (Soft Delete) -> Exito: {} | Mensaje: {}".format(ok4, msg4)
 
 * **`Query` (Consulta Tabular):**
   * Ejecución de consultas `SELECT` con retorno de un objeto `Dataset` (`com.inductiveautomation.ignition.common.BasicDataset`).
-  * Uso: Tablas en Perspective/Vision, listas desplegables (*Dropdowns*) o procesamiento con `system.dataset.toPyDataSet()`.
+  * Uso: Tablas en Perspective/Vision, listas desplegables (_Dropdowns_) o procesamiento con `system.dataset.toPyDataSet()`.
 * **`Scalar Query` (Consulta Escalar Atómica):**
   * Retorno directo de la primera celda de la primera fila como valor atómico (`int`, `float`, `unicode`, `java.util.Date`), o `None` si la consulta no devuelve filas.
   * Ventaja clave: Evita el código intermedio de desenvolvimiento de un Dataset (`ds.getValueAt(0, 0)`) para indicadores numéricos, contadores o KPIs individuales.
@@ -377,31 +377,32 @@ print "Caso 4 (Soft Delete) -> Exito: {} | Mensaje: {}".format(ok4, msg4)
   * Ejecución de sentencias `INSERT`, `UPDATE` o `DELETE` con retorno del número entero de filas afectadas (`rows_affected`).
   * Uso: Modificación de consignas, bajas lógicas y registros de auditoría con validación inmediata de filas afectadas (`rows == 1`).
 
-**3. Gestión de Parámetros: *Value Parameters* vs. *Query String Parameters***
+**3. Gestión de Parámetros:&#x20;**_**Value Parameters**_**&#x20;vs.&#x20;**_**Query String Parameters**_
 
 * **Value Parameters (`:nombreParam`):**
   * Vinculación nativa como `PreparedStatement` de Java (marcadores `?` en el driver JDBC).
-  * *Seguridad:* Inmunidad total contra inyección SQL y casteo estricto automático de tipos (`Integer`, `Float`, `String`, `DateTime`).
-  * *Rendimiento:* Máximo aprovechamiento de la precompilación y planes de ejecución en el motor SQL.
-  * *Ámbito de uso:* Estándar obligatorio para el 99% de las consultas (`WHERE col = :val`, `SET col = :val`, `VALUES (:val)`).
+  * _Seguridad:_ Inmunidad total contra inyección SQL y casteo estricto automático de tipos (`Integer`, `Float`, `String`, `DateTime`).
+  * _Rendimiento:_ Máximo aprovechamiento de la precompilación y planes de ejecución en el motor SQL.
+  * _Ámbito de uso:_ Estándar obligatorio para el 99% de las consultas (`WHERE col = :val`, `SET col = :val`, `VALUES (:val)`).
 * **Query String Parameters (`{nombreParam}`):**
   * Sustitución textual en crudo antes de compilar la sentencia.
-  * *Seguridad:* Vulnerable a inyección SQL si no se valida exhaustivamente mediante listas blancas en Python.
-  * *Ámbito de uso restringido:* Exclusivamente cuando el nombre de la tabla o columna es dinámico (ej. particiones temporales del Historian: `FROM sqlt_data_1_{mes}`).
+  * _Seguridad:_ Vulnerable a inyección SQL si no se valida exhaustivamente mediante listas blancas en Python.
+  * _Ámbito de uso restringido:_ Exclusivamente cuando el nombre de la tabla o columna es dinámico (ej. particiones temporales del Historian: `FROM sqlt_data_1_{mes}`).
 
 **4. Invocación Programática desde Scripts con `system.db.runNamedQuery`**
 
 * **Sintaxis de invocación:** `system.db.runNamedQuery([project], path, parameters)`.
 * **El contexto de Scopes y el parámetro `project`:**
   * En **Perspective Scope** o **Vision Client Scope**, el nombre del proyecto es implícito.
-  * En **Gateway Scope**, **Script Console** o tareas programadas (*Timer Scripts*), el argumento `project` es obligatorio o se lanza `IllegalArgumentException: Project name not specified`.
-* **El patrón universal agnóstico de Scope con `system.util.getProjectName()`:**
-  ```python
-  # Resuelve dinámicamente el proyecto para ejecución válida en cualquier Scope
-  project_name = system.util.getProjectName()
-  rows = system.db.runNamedQuery(project=project_name, path="Actuacions/InsertRegistre", parameters=params)
-  ```
-* **Sensibilidad estricta a mayúsculas y minúsculas (*Case-Sensitivity*):** Las claves del diccionario `parameters` deben coincidir de forma idéntica con los nombres declarados en la Named Query del Designer.
+  * En **Gateway Scope**, **Script Console** o tareas programadas (_Timer Scripts_), el argumento `project` es obligatorio o se lanza `IllegalArgumentException: Project name not specified`.
+*   **El patrón universal agnóstico de Scope con `system.util.getProjectName()`:**
+
+    ```python
+    # Resuelve dinámicamente el proyecto para ejecución válida en cualquier Scope
+    project_name = system.util.getProjectName()
+    rows = system.db.runNamedQuery(project=project_name, path="Actuacions/InsertRegistre", parameters=params)
+    ```
+* **Sensibilidad estricta a mayúsculas y minúsculas (**_**Case-Sensitivity**_**):** Las claves del diccionario `parameters` deben coincidir de forma idéntica con los nombres declarados en la Named Query del Designer.
 
 ```mermaid
 flowchart LR
@@ -442,7 +443,6 @@ flowchart LR
 #### Resultado esperado
 
 * Named Query creada en el árbol del Designer y consumida desde una función modular en `Project Library`, verificada mediante la Script Console ante llamadas nominales y llamadas con parámetros incorrectos, comprobando la persistencia en la tabla `stoppage_events`.
-
 
 #### 4. Paso a Paso para la Realización
 
