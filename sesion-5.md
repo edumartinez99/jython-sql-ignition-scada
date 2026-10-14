@@ -562,7 +562,7 @@ def log_operator_action(equip, description, username):
 print "=== VALIDACION LABORATORIO 5.2: CONSUMO DE NAMED QUERIES ==="
 
 # Caso 1: Registro nominal de maniobra de envio de consigna
-ok1, msg1 = project.actuacions.service.log_operator_action(
+ok1, msg1 = actuacions.service.log_operator_action(
     equip="EDAR_COMPRESOR_02",
     description=u"Orden Enviar Consigna SCMX: 8.5 bar por supervisor",
     username="laura.vidal"
@@ -570,7 +570,7 @@ ok1, msg1 = project.actuacions.service.log_operator_action(
 print "\nCaso 1 (Nominal)       -> Exito: {} | Mensaje: {}".format(ok1, msg1)
 
 # Caso 2: Registro de alarma de proceso
-ok2, msg2 = project.actuacions.service.log_operator_action(
+ok2, msg2 = actuacions.service.log_operator_action(
     equip="LINEA_ENVASADO_01",
     description=u"Reconocimiento manual de alarma: Parada de emergencia pulsada",
     username="carlos.gomez"
@@ -578,7 +578,7 @@ ok2, msg2 = project.actuacions.service.log_operator_action(
 print "Caso 2 (Alarma)        -> Exito: {} | Mensaje: {}".format(ok2, msg2)
 
 # Caso 3: Error por descripcion vacia
-ok3, msg3 = project.actuacions.service.log_operator_action(
+ok3, msg3 = actuacions.service.log_operator_action(
     equip="EDAR_BOMBA_01",
     description=" ",
     username="admin"
