@@ -109,9 +109,9 @@ Y abrimos dbeaver.
 
 * Elegimos Postgres y añadimos la configuración
   * Host: `postgres-maker-db`
-  * Database: `sandbox_db_01`
-  * Username: `ignition_user`
-  * Password: `DBPassword123!`
+  * Database: `sandbox_db_01` - 01 representa el número del alumno
+  * Username: `user_alumno01`  - 01 representa el número del alumno
+  * Password: `AlumnoPass01!` - 01 representa el número del alumno
 
 <figure><img src=".gitbook/assets/image (59).png" alt=""><figcaption></figcaption></figure>
 
