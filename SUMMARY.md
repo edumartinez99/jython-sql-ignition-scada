@@ -13,11 +13,11 @@
 * [Sesión 5](sesion-5.md)
 * [Mejoras Sesión 5](mejoras-5.md)
 * [Sesión 6](sesion-6.md)
+* [Mejoras Sesión 6](mejoras-6.md)
+* [Sesión 7](sesion-7.md)
 
 ## Group 1
 
-* [Mejoras Sesión 6](group-1/mejoras-6.md)
-* [Sesión 7](group-1/sesion-7.md)
 * [Sesión 8](group-1/sesion-8.md)
 * [Sesión 9](group-1/sesion-9.md)
 * [Sesión 10](group-1/sesion-10.md)
