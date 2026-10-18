@@ -407,6 +407,7 @@ Lanzar en Preview (`Ctrl+P`): la primera pulsación muestra `CACHE MISS` (~20 ms
 #### Contenidos
 
 * Cuestionario técnico individual de opción múltiple y resolución de casos de optimización de código y bases de datos.
+* [Cuestionario Sesión 8](https://docs.google.com/forms/d/e/1FAIpQLSeHDWwYuztymYsiqO5pwm-2v98rpIDJKeYyxA0LwKg8Eccltw/viewform?usp=header)
 
 #### Resultado esperado
 

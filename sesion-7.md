@@ -466,6 +466,7 @@ En el DateTime Picker, seleccionar las 03:30h: comprobar que el turno cambia a p
 #### Contenidos
 
 * Cuestionario técnico individual de opción múltiple y resolución de casos de gestión de tags y fechas.
+* [Cuestionario Sesión 7](https://docs.google.com/forms/d/e/1FAIpQLSeE_ZPXWNzn5zLH8czdMwsWT7uGH9LGB8PkBXbmsCIF3NCSWA/viewform?usp=header)
 
 #### Resultado esperado
 

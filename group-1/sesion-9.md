@@ -601,6 +601,8 @@ Lanzar en Preview (`Ctrl+P`), marcar las consignas deseadas y pulsar el botón. 
 #### Contenidos
 
 * Cuestionario técnico individual de opción múltiple y resolución de casos de arquitectura asíncrona, seguridad y refactorización.
+* [Cuestionario Sesión 9](https://docs.google.com/forms/d/e/1FAIpQLScU9yrROAxZ94hG9aecbwbSOYK1ztsRjbAFq4Pxnr67oNqnfw/viewform?usp=header)
+
 
 #### Resultado esperado
 
