@@ -33,28 +33,69 @@ description: Optimización Avanzada de Consultas SQL y Rendimiento de Scripts Jy
 
 #### Contenidos
 
-* Proyección controlada de columnas y reducción de carga de red:
-  * Eliminación de `SELECT *` en tablas de telemetría y eventos industriales.
-  * Selección estricta de las columnas necesarias para minimizar la serialización JDBC y el uso de memoria Heap.
-* Consultas SARGables e indexación eficiente:
-  * El problema de las funciones sobre columnas indexadas: cómo `WHERE DATE(fecha) = '...'` o `WHERE CAST(id AS VARCHAR) = '...'` invalidan los índices y fuerzan lecturas completas de disco (_Full Table Scan_).
-  * Construcción de filtros sargables mediante comparaciones directas por rangos binarios (`col >= :inicio AND col < :fin`).
-* Índices compuestos y ordenación:
-  * Jerarquía de columnas en índices B-Tree (ej. índice compuesto `(machine_id, timestamp)` para acelerar consultas por equipo y ventana temporal).
-* Separación de cargas transaccionales y analíticas:
-  * Creación de tablas de agregación histórica precalculada (resúmenes diarios/turnos) para evitar consultar tablas transaccionales de millones de filas desde cuadros de mando en tiempo real.
+**1. Proyección Controlada, Serialización JDBC y Presión de Memoria en la JVM**
+
+* **El peligro crítico del anti-patrón `SELECT *` en entornos SCADA:**
+  * En plantas industriales, las tablas de telemetría, eventos de proceso (`REG_OPERADORS`, `ins_Registre_Actuacions`), alarmas y recetas contienen habitualmente decenas de columnas (campos de texto libre, trazas de depuración, metadatos JSON y configuraciones de ingeniería).
+  * *Sobrecarga de red y driver JDBC:* El comodín `SELECT *` fuerza al motor SQL a leer la totalidad de las páginas de datos en disco, transferir bloques innecesarios a través de la red de control y serializar cada campo celda a celda en el driver JDBC hacia el Gateway.
+  * *Presión destructiva sobre el Garbage Collector de la JVM:* Cada fila transferida se desenvuelve como un array de objetos en la memoria heap de Ignition. Si una consulta histórica recupera 50.000 filas con 20 columnas, se instancian más de 1.000.000 de objetos temporales en memoria RAM. Esto dispara pausas mayores de recolección de basura (*Stop-the-World GC Pauses*), generando micro-congelamientos en las pantallas de los operadores y retardos transitorios en el Gateway.
+* **El principio de proyección estricta y mínima necesaria:**
+  * Regla de diseño: Proyectar únicamente las columnas indispensables para la lógica de cálculo o el renderizado visual (`SELECT id, Data, Operador, Accio FROM REG_OPERADORS`).
+  * *Habilitación de consultas cubiertas (*Covering Indexes*):* Si todas las columnas requeridas en el `SELECT` forman parte de un índice B-Tree, el motor RDBMS resuelve la consulta íntegramente leyendo el índice en memoria RAM sin acceder a las páginas de datos en disco (*Index-Only Scan*), multiplicando la velocidad de respuesta por órdenes de magnitud.
+
+**2. SARGability e Índices B-Tree: Anatomía del Acceso Quirúrgico a Datos**
+
+* **El concepto de SARGability (*Search Argument Able*):**
+  * Un predicado o filtro en la cláusula `WHERE` es *sargable* cuando el optimizador de base de datos puede emplear un índice de árbol B (*B-Tree*) para acotar directamente las filas coincidentes sin evaluar toda la tabla.
+  * *Operadores sargables nativos:* `=`, `<`, `>`, `<=`, `>=`, `BETWEEN`, `IN`, `IS NULL` y `LIKE 'patron%'` (búsqueda por prefijo exacto).
+  * *Operadores no sargables habituales:* `LIKE '%patron'`, `<>`, `!=`, `NOT IN` y, de forma crítica, **cualquier función matemática, de cadena o de fecha aplicada sobre una columna indexada**.
+* **El colapso por funciones sobre columnas temporales e indexadas:**
+  * Análisis de los anti-patrones industriales más comunes en consultas históricas:
+    ```sql
+    -- ANTI-PATRONES: Inutilizan índices B-Tree y fuerzan Full Table Scan
+    WHERE EXTRACT(YEAR FROM Data) = 2020
+    WHERE DATE_FORMAT(Data, '%Y-%m-%d') = '2026-10-22'
+    WHERE CAST(id_equipo AS VARCHAR) = 'BOMBA_01'
+    WHERE UPPER(Operador) = 'JUAN'
+    ```
+  * *Mecánica interna en el motor SQL:* Para evaluar `EXTRACT(YEAR FROM Data) = 2020`, el optimizador desconoce el resultado de la función hasta que procesa cada fila de forma individual. Por tanto, se ve forzado a leer todas las páginas de la tabla desde disco, aplicar la función sobre cada registro (ej. 2.000.000 de filas) y descartar las que no cumplan la condición.
+  * *Consecuencia en planta:* Escaneo completo de tabla (*Full Table Scan*), saturación de la E/S de disco, picos de CPU del 100% en el servidor de base de datos y retención excesiva de conexiones en el pool JDBC.
+* **El estándar sargable por rangos binarios:**
+  * En lugar de calcular o formatear el valor de la columna, se transforman los límites de comparación en literales o parámetros fijos evaluados en tiempo de consulta:
+    ```sql
+    -- PATRÓN SARGABLE ÓPTIMO: Búsqueda quirúrgica por índice (Index Seek)
+    WHERE Data >= '2020-01-01 00:00:00' AND Data < '2021-01-01 00:00:00'
+    ```
+  * *Mecánica del optimizador:*
+    * La columna permanece pura (`Data`), permitiendo una búsqueda binaria directa por índice (*Index Seek* o *Index Range Scan*).
+    * El motor desciende por el árbol B hasta la primera clave que cumple `>= '2020-01-01 00:00:00'` y lee secuencialmente hasta el límite estricto `< '2021-01-01 00:00:00'`, recuperando miles de filas en pocos milisegundos con un coste mínimo de lectura de páginas.
+    * El uso del operador menor estricto `<` con el primer instante del período siguiente evita desajustes de milisegundos (cubre exactamente hasta el microsegundo `2020-12-31 23:59:59.999999`).
+
+**3. Estrategias de Indexación Compuesta y Separación Transaccional/Analítica**
+
+* **Índices compuestos B-Tree y la regla del prefijo más a la izquierda (*Leftmost Prefix Rule*):**
+  * En registros de planta, las consultas operativas habitualmente combinan el identificador de máquina y una ventana temporal.
+  * *Definición de índice compuesto:* `CREATE INDEX idx_reg_equip_data ON REG_OPERADORS (Equip, Data);`.
+  * *Jerarquía de columnas:* La columna filtrada por igualdad exacta (`Equip = 'EDAR_BOMBA_01'`) debe situarse en la primera posición del índice, seguida de la columna de rango temporal (`Data >= ...`). Esto permite acotar primero el sub-árbol del equipo y luego barrenar el intervalo temporal.
+  * *Ordenación gratuita en disco:* Como las filas dentro del índice B-Tree ya están físicamente ordenadas por `Data`, la cláusula `ORDER BY Data DESC` se resuelve directamente sin necesidad de algoritmos de ordenación en memoria RAM (*Sort Operations*).
+* **Separación de cargas transaccionales y analíticas en SCADA (OLTP vs. OLAP):**
+  * *El conflicto de concurrencia en planta:* Paneles de supervisión mensual, cálculos de OEE o auditorías analíticas ejecutando consultas pesadas sobre tablas transaccionales en las que los PLCs y autómatas insertan telemetría en tiempo real.
+  * *Bloqueos y contención de hilos:* Consultas analíticas extensas adquieren bloqueos compartidos (*Shared Locks*), reteniendo a los hilos transaccionales que intentan adquirir bloqueos exclusivos (*Exclusive Locks*).
+  * *Estrategias arquitectónicas de desacoplamiento:*
+    * *Tablas de agregación histórica precalculada (Rollup / Summary Tables):* Procesos desatendidos en el Gateway (Gateway Scheduled Scripts mediante CRON en cambio de turno o fin de jornada) calculan los acumulados diarios y los insertan en tablas de resumen (`summary_daily_kpis`). Los cuadros de mando consultan la tabla agregada (cientos de filas) en menos de 1 ms, sin degradar la tabla transaccional de millones de filas.
+    * *Réplicas de lectura (*Read Replicas*):* Configuración de conexiones de base de datos secundarias en el Gateway dedicadas a consultas analíticas pesadas, aislando el motor transaccional primario.
 
 ```mermaid
 flowchart TD
     subgraph Consulta_No_Sargable [Consulta No Sargable: Invalida Indices]
-        FuncFilter[WHERE DATE_FORMAT;timestamp, '%Y-%m-%d'; = '2026-10-22']
-        TableScan[Full Table Scan: Lee Millones de Filas de Disco -> Alta Latencia]
+        FuncFilter["WHERE EXTRACT(YEAR FROM Data) = 2020"]
+        TableScan["Full Table Scan: Lee Millones de Filas de Disco -> Alta Latencia"]
         FuncFilter --> TableScan
     end
 
     subgraph Consulta_Sargable [Consulta Sargable: Optimizada]
-        DirectRange[WHERE timestamp >= '2026-10-22 00:00:00' AND timestamp < '2026-10-23 00:00:00']
-        IndexSeek[Index Seek: Acceso Directo por Arbol B-Tree -> Milisegundos]
+        DirectRange["WHERE Data >= '2020-01-01 00:00:00' AND Data < '2021-01-01 00:00:00'"]
+        IndexSeek["Index Seek: Acceso Directo por Arbol B-Tree -> Milisegundos"]
         DirectRange --> IndexSeek
     end
 ```
@@ -167,17 +208,61 @@ Lanzar en Preview (`Ctrl+P`), pulsar el botón y observar cómo la latencia pasa
 
 #### Contenidos
 
-* Detección y mitigación de scripts sobrecargados:
-  * Identificación de bindings de alta frecuencia que ejecutan scripts en cada refresco de tag.
-  * Delegación de lógica pesada hacia el Gateway o la base de datos para no penalizar la sesión web de Perspective.
-* Optimización de bucles e iteraciones:
-  * Eliminación de transformaciones encadenadas innecesarias (`Dataset -> PyDataSet -> Dict -> Dataset`) dentro de bucles cerrados.
-  * Uso de `PyDataSet` para lecturas directas sin creación de nuevos objetos en el Heap.
-* Medición precisa de rendimiento en Jython:
-  * Uso de `java.lang.System.nanoTime()` y `System.currentTimeMillis()` para perfilar tiempos reales de ejecución de funciones.
-* Patrón de Caché en Memoria del Gateway con TTL (_Time-To-Live_):
-  * Almacenamiento en memoria RAM de catálogos maestros, listas de recetas y tablas de configuración.
-  * Reducción drástica de peticiones repetitivas a la base de datos SQL.
+**1. Detección y Mitigación de Scripts Sobrecargados y Puntos Calientes (*Hotspots*)**
+
+* **La naturaleza del motor Jython en la arquitectura de Ignition:**
+  * Jython 2.7 ejecuta código Python compilándolo dinámicamente a bytecode sobre la Máquina Virtual de Java (JVM) del Gateway o del cliente.
+  * A diferencia de Java puro compilado estáticamente, el tipado dinámico de Python requiere resolución en tiempo de ejecución. Los bucles masivos o conversiones redundantes tienen un coste en ciclos de CPU mucho más elevado.
+* **Puntos calientes (*Hotspots*) habituales en sistemas SCADA:**
+  * *Script Transforms en Bindings de alta frecuencia:* Transformadores asociados a tags que cambian cada 100 ms o a propiedades que se recalculan ante cualquier evento de interfaz en Perspective. Si un transform contiene llamadas bloqueantes o lógica compleja, satura los núcleos de CPU del servidor multiplicando la carga por cada cliente web conectado.
+  * *Gateway Timer Scripts mal dimensionados:* Tareas cíclicas configuradas en el pool compartido (*Shared Pool*) ejecutando scripts cuya duración excede el intervalo de muestreo (ej. script de 800 ms corriendo cada 500 ms), provocando el encolamiento y congelamiento de todos los temporizadores del Gateway.
+  * *Tag Change Scripts con flancos no filtrados:* Scripts de cambio de tag que omiten la validación `if not initialChange:`, disparando cientos de ejecuciones concurrentes cada vez que el Gateway arranca o se guarda el proyecto en el Designer.
+* **Perfilado de rendimiento de alta precisión en Jython:**
+  * Medición de tiempos de ejecución utilizando las APIs nativas de la JVM:
+    * `java.lang.System.nanoTime()`: Medición de intervalos ultracortos con precisión de nanosegundos ($10^{-9}\text{ s}$), ideal para medir funciones de transformación de datos y micro-benchmarking en memoria RAM.
+    * `java.lang.System.currentTimeMillis()`: Reloj de época para cálculo de duraciones de proceso, control de tiempos de expiración y almacenamiento de marcas temporales en milisegundos.
+  * *Cálculo de latencia en milisegundos con alta resolución:*
+    $$\Delta t_{\text{ms}} = \frac{t_1 - t_0}{1.000.000,0}$$
+
+**2. Optimización de Memoria, Bucles e Iteraciones en la JVM**
+
+* **El coste oculto de las conversiones redundantes de datasets:**
+  * *Análisis del anti-patrón de manipulación:*
+    ```python
+    # ANTI-PATRÓN: Múltiples conversiones encadenadas que saturan el Heap
+    raw_ds = system.db.runQuery("SELECT ...")
+    py_ds = system.dataset.toPyDataSet(raw_ds)
+    lista_dicts = []
+    for row in py_ds:
+        lista_dicts.append({"id": row["id"], "nombre": row["nombre"]})
+    final_ds = system.dataset.toDataSet(headers, [list(d.values()) for d in lista_dicts])
+    ```
+  * *Presión sobre la memoria Heap:* Cada conversión intermedia (`Dataset` -> `PyDataSet` -> `dict` -> `list` -> `Dataset`) crea nuevos objetos efímeros en la memoria de la JVM. En bucles de procesamiento histórico o telemetría, esto fragmenta la memoria y provoca una alta frecuencia de ciclos del recolector de basura (*GC pressure*), ralentizando el rendimiento general del Gateway.
+* **El estándar de acceso directo con `PyDataSet`:**
+  * `system.dataset.toPyDataSet` (o el retorno directo de `system.db.runPrepQuery`) envuelve el dataset nativo de Java en un adaptador ligero sin duplicar los datos en memoria.
+  * Ofrece acceso indexado directo por nombre de columna (`row["columna"]`) o índice ordinal (`row[0]`) con complejidad O(1).
+  * Si el objetivo es iterar para renderizar una tabla o evaluar condiciones lógicas, debe iterarse directamente sobre el `PyDataSet` sin conversiones intermedias ni generación de diccionarios auxiliares innecesarios.
+* **Comprensiones de listas (*List Comprehensions*):**
+  * Las comprensiones de listas (`[expr for item in iterable]`) se ejecutan internamente a nivel de bytecode en la JVM, siendo entre un 30% y un 50% más rápidas en Jython que los bucles `for` tradicionales con llamadas continuas al método `.append()`.
+
+**3. El Patrón de Caché en Memoria del Gateway con TTL (*Time-To-Live*)**
+
+* **La problemática de las consultas repetitivas de datos de baja volatilidad:**
+  * En entornos industriales, multitud de tablas almacenan datos que rara vez cambian: catálogos maestros de equipos, listas de recetas, parámetros de tolerancias de calidad, tablas de operadores autorizados y descripciones de averías.
+  * *El anti-patrón de consulta recurrente:* Decenas de clientes SCADA o scripts de Gateway ejecutando continuamente consultas SQL (`SELECT * FROM machine_setpoints`) para leer exactamente la misma información estática. Cada petición abre conexiones JDBC, transmite datos por la red y consume CPU del motor de base de datos.
+* **Arquitectura del patrón de Caché en Memoria RAM del Gateway:**
+  * Implementación de un almacén en memoria a nivel de `Project Library` (diccionario global `_CACHE_STORE`).
+  * En Ignition, los módulos de `Project Library` mantienen su estado en memoria dentro del contexto del Gateway entre ejecuciones de scripts, lo que permite conservar variables globales de caché de forma persistente mientras el servicio de Gateway esté activo.
+  * *Mecánica del patrón `get_or_set`:*
+    1. Se calcula una clave unívoca para el recurso (`cache_key`).
+    2. Se comprueba si la clave existe en memoria y si su tiempo transcurrido no supera el TTL configurado:
+       $$\text{now\_ms} - \text{timestamp} < \text{TTL\_ms}$$
+    3. **Cache Hit (Acierto de Caché):** Se devuelve de forma inmediata el dato residente en memoria RAM. Tiempo de respuesta: **< 0,05 ms** (cero consultas SQL, cero consumo de conexiones JDBC y cero latencia de red).
+    4. **Cache Miss (Fallo o Expiración):** Se invoca la función original de extracción (`fetch_function`), se almacena el nuevo resultado junto con la marca temporal actual (`System.currentTimeMillis()`) y se retorna el dato fresco. Tiempo de respuesta: ~15 a 50 ms (únicamente en la primera ejecución o tras la caducidad del TTL).
+* **Estrategias de invalidación de caché:**
+  * *Expiración automática por tiempo (TTL):* Refresco periódico desatendido garantizado (ej. cada 60 segundos o 10 minutos).
+  * *Invalidación proactiva manual (*Cache Invalidation*):* Invocación de `clear_cache(cache_key)` inmediatamente después de que un operador guarde una modificación en la pantalla de recetas o consignas, forzando a que la siguiente lectura recargue los datos frescos de la base de datos sin demoras.
+
 
 ```mermaid
 flowchart TD
