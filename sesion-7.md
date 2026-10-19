@@ -176,14 +176,25 @@ def format_telemetry_table(telemetry_data):
     if not telemetry_data:
         return []
     rows = []
-    for tag_name, info in telemetry_data.items():
-        is_good = info.get("is_good", False)
+    for tag_name in telemetry_data:
+        info = telemetry_data[tag_name]
+        is_good = bool(info["is_good"]) if ("is_good" in info and info["is_good"]) else False
+        quality_str = str(info["quality"]) if "quality" in info else "Unknown"
+        raw_val = info["value"] if "value" in info else None
+        ts = info["timestamp"] if "timestamp" in info else None
+        if ts:
+            try:
+                ts_str = system.date.format(ts, "yyyy-MM-dd HH:mm:ss")
+            except Exception:
+                ts_str = str(ts)
+        else:
+            ts_str = "---"
         rows.append({
-            "tag": tag_name,
-            "valor": str(info.get("value")) if is_good else "---",
-            "calidad": info.get("quality", "Unknown"),
+            "tag": str(tag_name),
+            "valor": str(raw_val) if is_good and raw_val is not None else "---",
+            "calidad": quality_str,
             "estado": "CONFIABLE" if is_good else "ERROR",
-            "timestamp": system.date.format(info.get("timestamp"), "yyyy-MM-dd HH:mm:ss") if info.get("timestamp") else "---",
+            "timestamp": ts_str,
             "_style": {"backgroundColor": "#ffffff" if is_good else "#fdedec", "color": "#2c3e50" if is_good else "#c0392b"}
         })
     return rows
@@ -200,14 +211,37 @@ def apply_equipment_setpoints(base_path, scfl_val, scmx_val, esim_val):
     return {"success": False, "message": "Escritura rechazada: " + "; ".join(fails), "color": "#c0392b"}
 ```
 
-**Paso 2: Validación en Script Console**
-Guardar (`Ctrl+S`) y verificar en la Script Console:
+**Paso 2: Validación en Script Console y Creación de Tags de Memoria**
+Guardar (`Ctrl+S`) y ejecutar en la Script Console para aprovisionar las variables y comprobar los servicios:
 ```python
+# 1. Configuracion de tags de prueba en el provider [default]
+tag_config = [
+    {
+        "name": "EDAR",
+        "tagType": "Folder",
+        "tags": [
+            {
+                "name": "EDAR_BOMBA_01",
+                "tagType": "Folder",
+                "tags": [
+                    {"name": "SCFL", "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Float4", "value": 45.0},
+                    {"name": "SCMX", "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Float4", "value": 85.0},
+                    {"name": "ESIM", "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Boolean", "value": False},
+                    {"name": "SFOR", "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Boolean", "value": False}
+                ]
+            }
+        ]
+    }
+]
+results = system.tag.configure("[default]", tag_config, "o")
+print "Resultado configuracion de tags:", results
+
+# 2. Verificacion de lectura masiva y formateo
 base = "[default]EDAR/EDAR_BOMBA_01"
-ui_data = project.tags.service.refresh_telemetry_ui(base, ["SCFL", "SCMX", "ESIM", "TAG_INEXISTENTE_TEST"])
+ui_data = tags.service.refresh_telemetry_ui(base, ["SCFL", "SCMX", "ESIM", "SFOR", "TAG_INEXISTENTE_TEST"])
 print "Telemetria:", ui_data["message"]
-print "Filas Table:", len(project.tags.service.format_telemetry_table(ui_data["data"]))
-write_res = project.tags.service.apply_equipment_setpoints(base, 55.0, 100.0, False)
+print "Filas Table:", len(tags.service.format_telemetry_table(ui_data["data"]))
+write_res = tags.service.apply_equipment_setpoints(base, 55.0, 100.0, False)
 print "Escritura Batch:", write_res["message"]
 ```
 
@@ -220,19 +254,24 @@ print "Escritura Batch:", write_res["message"]
    * `custom.statusColor`: `"#27ae60"`
 2. **Botón Refrescar (`btn_Refrescar` -> `onActionPerformed` - 2 líneas):**
    ```python
-   res = project.tags.service.refresh_telemetry_ui(self.view.custom.basePath, self.view.custom.tagList)
+   res = tags.service.refresh_telemetry_ui(self.view.custom.basePath, self.view.custom.tagList)
+   self.view.custom.telemetryData, self.view.custom.statusMessage, self.view.custom.statusColor = res["data"], res["message"], res["color"]
+   ```
+   * En Message Handlers de `btn_Refrescar` (`onMessageReceived` con tipo de mensaje `refrescar_tabla`):
+   ```python
+   res = tags.service.refresh_telemetry_ui(self.view.custom.basePath, self.view.custom.tagList)
    self.view.custom.telemetryData, self.view.custom.statusMessage, self.view.custom.statusColor = res["data"], res["message"], res["color"]
    ```
 3. **Tabla de Telemetría (`table_Telemetria.props.data` Transform - 1 línea):**
    ```python
-   return project.tags.service.format_telemetry_table(value)
+   return tags.service.format_telemetry_table(value)
    ```
-4. **Botón Aplicar Consignas (`btn_EnviarLote` -> `onActionPerformed` - 3 líneas):**
+4. **Botón Aplicar Consignas (`btn_EnviarLote` -> `onActionPerformed`):**
    ```python
-   res = project.tags.service.apply_equipment_setpoints(self.view.custom.basePath, self.getSibling("num_SCFL").props.value, self.getSibling("num_SCMX").props.value, self.getSibling("toggle_ESIM").props.selected)
+   res = tags.service.apply_equipment_setpoints(self.view.custom.basePath, self.getSibling("NumericEntryField").props.value, self.getSibling("NumericEntryField_0").props.value, self.getSibling("ToggleSwitch").props.selected)
    self.view.custom.statusMessage, self.view.custom.statusColor = res["message"], res["color"]
    if res["success"]:
-       self.getSibling("btn_Refrescar").fireEvent("onActionPerformed")
+       system.perspective.sendMessage("refrescar_tabla", scope="view")
    ```
 
 **Paso 4: Verificación Interactiva**
@@ -391,7 +430,7 @@ def get_shift_window(target_date=None):
         "start_date": cal_start.getTime(), "end_date": cal_end.getTime()
     }
 
-def query_shift_actions(shift_window, equip=None, db_conn="SANDBOX_DB"):
+def query_shift_actions(shift_window, equip=None, db_conn="DB_Admin"):
     sql = "SELECT id, Equip, Descripcio, Usuari, DataHora FROM ins_Registre_Actuacions WHERE DataHora >= ? AND DataHora <= ?"
     args = [shift_window["start_date"], shift_window["end_date"]]
     if equip:
@@ -406,14 +445,35 @@ def get_shift_badge_style(shift_id):
     return colors.get(shift_id, "#7f8c8d")
 
 def format_shift_window_label(shift_window):
-    if not shift_window or "start_date" not in shift_window: return "---"
-    return "Horario: {}h - {}h".format(system.date.format(shift_window["start_date"], "HH:mm"), system.date.format(shift_window["end_date"], "HH:mm"))
+    if not shift_window:
+        return "---"
+    start = shift_window["start_date"] if "start_date" in shift_window else shift_window.get("start_date")
+    end = shift_window["end_date"] if "end_date" in shift_window else shift_window.get("end_date")
+    if start and end:
+        try:
+            start_str = system.date.format(start, "HH:mm")
+        except Exception:
+            start_str = str(start)
+        try:
+            end_str = system.date.format(end, "HH:mm")
+        except Exception:
+            end_str = str(end)
+        return "Horario: {}h - {}h".format(start_str, end_str)
+    return "---"
 
 def get_shift_operational_note(shift_window):
-    return "Turno Noche: Horas de madrugada imputadas al día anterior" if shift_window.get("shift_id") == 3 else "Día operativo coincide con día natural"
+    if not shift_window:
+        return ""
+    shift_id = shift_window["shift_id"] if "shift_id" in shift_window else shift_window.get("shift_id")
+    if shift_id == 3:
+        return "Turno Noche: Horas de madrugada imputadas a la fecha de inicio"
+    elif shift_id in (1, 2):
+        return "Día operativo coincide con el día natural"
+    return ""
 
-def format_shift_actions_table(shift_window, equip=None, db_conn="SANDBOX_DB"):
-    if not shift_window or "start_date" not in shift_window: return []
+def format_shift_actions_table(shift_window, equip=None, db_conn="DB_Admin"):
+    if not shift_window or "start_date" not in shift_window:
+        return []
     equip_filter = None if equip in (None, "TODOS") else equip
     raw_ds = query_shift_actions(shift_window, equip=equip_filter, db_conn=db_conn)
     return [{"id": r["id"], "Equipo": r["Equip"], "Descripcion": r["Descripcio"], "Usuario": r["Usuari"], "FechaHora": system.date.format(r["DataHora"], "dd/MM/yyyy HH:mm:ss") if r["DataHora"] else "---"} for r in system.dataset.toPyDataSet(raw_ds)]
@@ -421,10 +481,28 @@ def format_shift_actions_table(shift_window, equip=None, db_conn="SANDBOX_DB"):
 
 **Paso 2: Validación en Script Console**
 ```python
-d_test = system.date.parse("2026-10-21 03:30:00", "yyyy-MM-dd HH:mm:ss") # Caso critico madrugada
-info = project.util.shifts.get_shift_window(d_test)
-print "Turno:", info["shift_name"], "| Dia Operativo:", info["operational_date"], "| Color:", project.util.shifts.get_shift_badge_style(info["shift_id"])
-print "Actuaciones recuperadas:", len(project.util.shifts.format_shift_actions_table(info, "EDAR_BOMBA_01"))
+from java.util import Date
+
+# 1. Simulación de marcas temporales de prueba
+timestamps_test = [
+    {"name": "Mañana Nominal (10:30h)",        "ts": "2026-10-20 10:30:00"},
+    {"name": "Tarde Nominal (16:45h)",         "ts": "2026-10-20 16:45:00"},
+    {"name": "Noche - Madrugada (03:30h)",      "ts": "2026-10-21 03:30:00"} # Caso Critico
+]
+
+for t in timestamps_test:
+    d = system.date.parse(t["ts"], "yyyy-MM-dd HH:mm:ss")
+    info = util.shifts.get_shift_window(d)
+    print "\nCaso: {}".format(t["name"])
+    print " - Turno:          {} (ID: {})".format(info["shift_name"], info["shift_id"])
+    print " - Color Badge UI: {}".format(util.shifts.get_shift_badge_style(info["shift_id"]))
+    print " - Etiqueta UI:    {}".format(util.shifts.format_shift_window_label(info))
+    print " - Nota Imputacion:{}".format(util.shifts.get_shift_operational_note(info))
+
+# 2. Prueba de la funcion de datos para Table de Perspective
+shift_actual = util.shifts.get_shift_window(target_date=Date(126, 7, 25, 8, 0, 0))
+table_data = util.shifts.format_shift_actions_table(shift_actual, equip="EDAR_BOMBA_01")
+print "\n2. Filas obtenidas para Table.props.data:", len(table_data)
 ```
 
 **Paso 3: Dashboard de Turnos en Perspective (`Views/Laboratorios/Lab7_2_ShiftDashboard`)**
@@ -433,21 +511,26 @@ print "Actuaciones recuperadas:", len(project.util.shifts.format_shift_actions_t
    * `custom.shiftMeta`: `{}`
 2. **Evento de Inicio (`view -> onStartup` - 1 línea):**
    ```python
-   self.custom.shiftMeta = project.util.shifts.get_shift_window(None)
+   self.view.custom.shiftMeta = util.shifts.get_shift_window(None)
    ```
 3. **Banner KPI (Scripts de 1 línea en Transforms):**
-   * Color de fondo Tarjeta Turno: `return project.util.shifts.get_shift_badge_style(value)`
-   * Texto Tarjeta Día Operativo: `return project.util.shifts.get_shift_operational_note(value)`
-   * Texto Tarjeta Horario: `return project.util.shifts.format_shift_window_label(value)`
+   * Color de fondo Tarjeta Turno: `return util.shifts.get_shift_badge_style(value)`
+   * Texto Tarjeta Día Operativo: `return util.shifts.get_shift_operational_note(value)`
+   * Texto Tarjeta Horario: `return util.shifts.format_shift_window_label(value)`
 4. **Controles y Tabla:**
+   * **Dropdown** (`drop_Equipo`): Binding bidireccional a `view.custom.selectedEquip`: `LINEA_ENVASADO_01`, `EDAR_COMPRESOR_02`, `DECANTADOR_01`, `EDAR_BOMBA_02`, `EDAR_BOMBA_01`, `VALVULA_RECIRC_01`, `EDAR_COMPRESOR_01`, `LINEA_ENVASADO_02`.
    * Botón Evaluar Simulación (`btn_Evaluar -> onActionPerformed` - 2 líneas):
      ```python
      target = self.getSibling("dt_Simulador").props.value
-     self.view.custom.shiftMeta = project.util.shifts.get_shift_window(target)
+     self.view.custom.shiftMeta = util.shifts.get_shift_window(target)
+     ```
+   * Botón Ahora (`btn_Ahora -> onActionPerformed` - 1 línea):
+     ```python
+     self.view.custom.shiftMeta = util.shifts.get_shift_window(None)
      ```
    * Tabla Actuaciones (`table_Actuaciones.props.data` Transform - 1 línea):
      ```python
-     return project.util.shifts.format_shift_actions_table(value, equip=self.view.custom.selectedEquip)
+     return util.shifts.format_shift_actions_table(value, equip=self.view.custom.selectedEquip)
      ```
 
 **Paso 4: Verificación Interactiva**
