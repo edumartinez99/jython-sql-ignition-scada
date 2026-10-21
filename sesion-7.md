@@ -528,7 +528,12 @@ print "\n2. Filas obtenidas para Table.props.data:", len(table_data)
        `concat("Horario: ", dateFormat({view.custom.shiftMeta.start_date}, "HH:mm"), "h - ", dateFormat({view.custom.shiftMeta.end_date}, "HH:mm"), "h")`
    * **Tarjeta Día Operativo:** En `props.text`: `return util.shifts.get_shift_operational_note(value)`
 4. **Controles y Tabla:**
-   * **Dropdown** (`drop_Equipo`): Binding bidireccional a `view.custom.selectedEquip`.
+   * **Dropdown** (`drop_Equipo`):
+     * En `props.options`, binding con **Script Transform** para cargar dinámicamente los equipos:
+       ```python
+       return system.db.runQuery("SELECT distinct equip FROM ins_registre_actuacions", "DB_Admin")
+       ```
+     * En `props.value`, binding **Bidireccional (Bidirectional)** hacia `view.custom.selectedEquip`.
    * Botón Evaluar Simulación (`btn_Evaluar -> onActionPerformed` - 2 líneas):
      ```python
      target = self.getSibling("dt_Simulador").props.value
