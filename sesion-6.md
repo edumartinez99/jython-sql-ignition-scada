@@ -367,8 +367,8 @@ print "Caso 2 (Rollback) -> Exito: {} | Mensaje: {}".format(ok2, msg2)
 #### Objetivos
 
 * Comprender el ciclo de vida, propósito y limitaciones de los _Script Transforms_ en la arquitectura web de Perspective.
-* Identificar y erradicar anti-patrones críticos que provocan congelamientos en la interfaz gráfica y saturación de hilos en el Gateway.
-* Aplicar el estándar de diseño basado en funciones puras delegadas a `Project Library`.
+* Identificar y erradicar anti-patrones críticos: saturación de hilos en el Gateway por I/O bloqueante y abuso de scripting para diseño visual.
+* Comprender la jerarquía de rendimiento en Perspective y aplicar la regla de oro: delegar estilos a *Style Classes* y mapeos discretos a *Map Transforms*, reservando el scripting para enriquecimiento complejo de datos.
 
 #### Contenidos
 
@@ -392,10 +392,17 @@ print "Caso 2 (Rollback) -> Exito: {} | Mensaje: {}".format(ok2, msg2)
   * Riesgo de paralizar la reactividad visual si un PLC o servicio externo responde con demora o pierde la comunicación; el acceso a datos adicionales debe resolverse mediante Tag Bindings directos o propiedades personalizadas (*Custom Properties*).
 * **Prohibición de efectos secundarios (*Side Effects*):**
   * Un transform debe ser estrictamente un formateador de datos en memoria; jamás debe escribir en tags (`writeBlocking`) ni realizar modificaciones en base de datos (`UPDATE`/`INSERT`).
-* **Eliminación de código espagueti monolítico embebido:**
-  * Evitar scripts extensos de decenas de líneas dentro del componente; dificultan la depuración, carecen de versionado modular y multiplican la duplicación de código.
+* **Anti-patrón de Estilos en Scripting (Sobrecarga de CPU en Gateway):**
+  * Asignar colores hexadecimales (`#27ae60`, `#e74c3c`), tipografías o iconos mediante funciones de Python dentro de bindings es una mala práctica en SCADA OT. Cada refresco invoca al runtime de Jython, cuando Ignition cuenta con motores CSS nativos que delegan el 100% del renderizado a la GPU y navegador del operador.
 
-**3. Guía de Estilo Sénior y Programación Defensiva**
+**3. Criterio de Selección: ¿Cuándo Usar Funcionalidades Nativas vs Scripting?**
+
+* **Para Estilos y Apariencia (Colores, Estados, Fuentes):** Usar **Perspective Style Classes**. Se compilan a CSS puro en el cliente.
+* **Para Mapeo de Códigos Discretos (0 -> Off, 1 -> On, 2 -> Alarma):** Usar **Map Transforms** nativos. Se ejecutan en microsegundos dentro de la JVM sin llamar al intérprete de Python.
+* **Para Formatos Numéricos y Fechas:** Usar **Format Transforms** nativos o **Expression Bindings** (`dateFormat`).
+* **¿Cuándo sí usar Script Transforms?** Exclusivamente para transformaciones algorítmicas en memoria que las expresiones nativas no pueden resolver (ej. deserializar payloads JSON heterogéneos, filtrar matrices multidimensionales o realizar cálculos matemáticos específicos).
+
+**4. Guía de Estilo Sénior y Programación Defensiva**
 
 * **Delegación estricta a funciones puras en `Project Library`:**
   * Construcción de transformadores en módulos reutilizables (ej. `project.ui.transforms`).
@@ -407,25 +414,24 @@ print "Caso 2 (Rollback) -> Exito: {} | Mensaje: {}".format(ok2, msg2)
 * **Tratamiento defensivo ante valores nulos (`value is None`) en arranques asíncronos:**
   * Durante la carga inicial de una vista, los bindings pueden tardar unos milisegundos en resolver su primer dato real, entregando `None` o diccionarios vacíos.
   * Comprobación obligatoria en la cabecera de la función (`if value is None: return default_dict`), erradicando excepciones de tipo `TypeError` y recuadros de error visual (*Overlay Errors*) en pantalla.
-* **Generación de estructuras visuales compuestas:** Retorno de diccionarios con estilos dinámicos (colores hexadecimales, textos explicativos, iconos y clases CSS) para alimentar simultáneamente múltiples aspectos del componente en una sola evaluación.
 
 #### Resultado esperado
 
-* Capacidad para construir bindings reactivos y ligeros en Perspective que no degraden la experiencia de usuario ni sobrecarguen los hilos del servidor.
+* Capacidad para auditar bindings en sistemas SCADA en producción, eliminando llamadas de I/O bloqueantes y sustituyendo scripts innecesarios por alternativas nativas de Ignition (*Style Classes* y *Map Transforms*).
 
 ***
 
-### 6. Laboratorio 6.2: Script Transform Defensivo y Estilizado en Perspective
+### 6. Laboratorio 6.2: Detección de Anti-Patrones en Bindings y Optimización: Script Transforms vs Funcionalidades Nativas
 
 #### Objetivos
 
-* Construir una función en `Project Library` (`project.ui.transforms`) que reciba un objeto de telemetría y genere una estructura visual completa (texto descriptivo, código de color, icono y bandera de parpadeo).
-* Conectar la función a un Script Transform en una vista de Perspective asegurando un tiempo de evaluación casi instantáneo.
+* Evaluar código de bindings existente en Perspective, detectando anti-patrones de rendimiento (consultas bloqueantes en hilos de UI y abuso de scripts para tareas de diseño).
+* Comprender el coste computacional de los *Script Transforms* en el Gateway frente a las alternativas nativas de Ignition (*Style Classes* y *Map Transforms*).
+* Implementar una función pura en `Project Library` (`project.ui.transforms`) para manipulación avanzada de datos en memoria y compararla con el estándar nativo sin código recomendado para sistemas SCADA en producción.
 
 #### Resultado esperado
 
-* Script Transform operativo en una vista de Perspective que delega la lógica en `Project Library` y actualiza dinámicamente el estilo y contenido de una tarjeta de máquina según su estado operativo (producción, parada, mantenimiento, sin comunicación).
-
+* Los alumnos son capaces de auditar un binding en Perspective, justificar técnicamente cuándo utilizar una funcionalidad nativa frente a un script, y aplicar la configuración óptima mediante **Style Classes** y **Map Transforms** para colores/estilos, reservando el *Script Transform* exclusivamente para lógica de transformación de datos que no pueda resolverse de forma nativa.
 
 #### 4. Paso a Paso para la Realización
 
@@ -434,34 +440,38 @@ print "Caso 2 (Rollback) -> Exito: {} | Mensaje: {}".format(ok2, msg2)
 1. En el _Project Browser_, desplegar **Server Scripting -> Project Library**.
 2. Crear el script: `ui.transforms` (carpeta `ui`, script `transforms`).
 
-**Paso 2: Implementación de la Función Pura de Formateo Visual**
+**Paso 2: Implementación de la Función Pura de Formateo Visual (Método Script)**
 
 Copiar y guardar el siguiente código en `project.ui.transforms`:
 
 ```python
 """
 Modulo: project.ui.transforms
-Descripcion: Funciones puras para Script Transforms en Perspective.
-             Cero I/O, ejecucion instantanea en memoria RAM.
-Autor: Equipo SCADA
+Descripcion: Funciones puras para transformacion de datos en Perspective.
+             Cero I/O, ejecucion en memoria RAM.
+
+NOTA DE ARQUITECTURA SCADA:
+Para cambiar colores o clases segun un codigo numerico simple (1, 2, 3),
+en entornos de produccion se debe priorizar MAP TRANSFORM + STYLE CLASSES
+para evitar el consumo de ciclos de CPU de Jython en el Gateway.
 """
 
 def format_equipment_status_card(raw_state_data):
     """
-    Transforma un diccionario o valor de estado crudo en metadatos visuales para UI.
+    Transforma un diccionario o valor de estado crudo en metadatos para UI.
+    Util cuando el dato viene de una API o estructura compleja que requiere enriquecimiento.
     
     Args:
         raw_state_data (dict|any): Objeto que contiene {'status_code': int, 'flow_val': float, ...}
         
     Returns:
-        dict: Propiedades listas para enlazar a estilos, texto e iconos de Perspective.
+        dict: Propiedades normalizadas (status_text, style_class, etc.)
     """
     # 1. Tratamiento defensivo ante estados nulos o arranque de pantalla
     if raw_state_data is None or not isinstance(raw_state_data, dict):
         return {
             "status_text": "SIN COMUNICACION",
-            "bg_color": "#7f8c8d",       # Gris oscuro
-            "text_color": "#ffffff",
+            "style_class": "Equipment/Offline",
             "icon_path": "material/cloud_off",
             "blink_animation": True,
             "badge_class": "badge-offline"
@@ -470,13 +480,12 @@ def format_equipment_status_card(raw_state_data):
     state_code = raw_state_data.get("status_code", -1)
     flow_val = raw_state_data.get("flow_val", 0.0)
     
-    # 2. Mapeo de estados y estilos condicionales
+    # 2. Mapeo de estados y clases de estilo semanticas (evitar hardcodear colores HEX)
     if state_code == 1: # En Marcha / Produciendo
         flow_str = "{:.1f} m3/h".format(flow_val) if flow_val is not None else "0.0 m3/h"
         return {
             "status_text": "EN PRODUCCION ({})".format(flow_str),
-            "bg_color": "#27ae60",       # Verde
-            "text_color": "#ffffff",
+            "style_class": "Equipment/Running",
             "icon_path": "material/play_circle_filled",
             "blink_animation": False,
             "badge_class": "badge-running"
@@ -484,8 +493,7 @@ def format_equipment_status_card(raw_state_data):
     elif state_code == 2: # Parada / Alarma
         return {
             "status_text": "PARADA DE EMERGENCIA / ALARMA",
-            "bg_color": "#e74c3c",       # Rojo
-            "text_color": "#ffffff",
+            "style_class": "Equipment/Alarm",
             "icon_path": "material/error",
             "blink_animation": True,
             "badge_class": "badge-alarm"
@@ -493,8 +501,7 @@ def format_equipment_status_card(raw_state_data):
     elif state_code == 3: # En Mantenimiento
         return {
             "status_text": "MANTENIMIENTO PREVENTIVO",
-            "bg_color": "#f39c12",       # Ambar
-            "text_color": "#000000",
+            "style_class": "Equipment/Maintenance",
             "icon_path": "material/build",
             "blink_animation": False,
             "badge_class": "badge-maintenance"
@@ -502,8 +509,7 @@ def format_equipment_status_card(raw_state_data):
     elif state_code == 0: # En Espera / Standby
         return {
             "status_text": "STANDBY / EN ESPERA",
-            "bg_color": "#95a5a6",       # Gris claro
-            "text_color": "#000000",
+            "style_class": "Equipment/Standby",
             "icon_path": "material/pause_circle_outline",
             "blink_animation": False,
             "badge_class": "badge-standby"
@@ -511,8 +517,7 @@ def format_equipment_status_card(raw_state_data):
     else:
         return {
             "status_text": "ESTADO INDEFINIDO (Código: {})".format(state_code),
-            "bg_color": "#34495e",       # Azul oscuro
-            "text_color": "#ffffff",
+            "style_class": "Equipment/Unknown",
             "icon_path": "material/help_outline",
             "blink_animation": False,
             "badge_class": "badge-unknown"
@@ -528,36 +533,55 @@ def format_equipment_status_card(raw_state_data):
 1. Abrir la **Script Console** y probar los casos posibles:
 
 ```python
-print "=== VALIDACION LABORATORIO 6.2: SCRIPT TRANSFORMS ==="
+print "=== VALIDACION LABORATORIO 6.2: TRANSFORMS EN MEMORIA ==="
 
 casos_ui = [
-    {"name": "Bomba 1 en Marcha",     "data": {"status_code": 1, "flow_val": 64.8}},
-    {"name": "Compresor en Alarma",   "data": {"status_code": 2, "flow_val": 0.0}},
+    {"name": "Bomba 1 en Marcha",       "data": {"status_code": 1, "flow_val": 64.8}},
+    {"name": "Compresor en Alarma",     "data": {"status_code": 2, "flow_val": 0.0}},
     {"name": "Decantador Mantenimiento","data": {"status_code": 3, "flow_val": 0.0}},
-    {"name": "Valvula en Standby",     "data": {"status_code": 0, "flow_val": 0.0}},
-    {"name": "Desconexion / None",    "data": None}
+    {"name": "Valvula en Standby",       "data": {"status_code": 0, "flow_val": 0.0}},
+    {"name": "Desconexion / None",      "data": None}
 ]
 
 for c in casos_ui:
     res = project.ui.transforms.format_equipment_status_card(c["data"])
-    print "Caso: {:<25} -> Texto: {:<32} | Color: {:<8} | Icon: {}".format(
-        c["name"], res["status_text"], res["bg_color"], res["icon_path"]
+    print "Caso: {:<25} -> Texto: {:<32} | StyleClass: {:<22} | Icon: {}".format(
+        c["name"], res["status_text"], res["style_class"], res["icon_path"]
     )
 ```
 
-**Paso 5: Configuración en la Vista de Perspective**
+**Paso 5: Comparativa Práctica en Perspective: ¿Script Transform vs Nativo?**
 
-1. En **Perspective -> Views**, abrir cualquier vista de prueba (o crear una vista llamada `Test_Card`).
-2. Añadir un componente **Label** o **Flex Container**.
-3. En la propiedad `props.text` o `custom.cardStyle`, crear un **Tag Binding** o **Property Binding**.
-4. Añadir un **Script Transform** al binding.
-5.  Escribir **exclusivamente** esta línea en el transform:
+Para consolidar el criterio industrial, implementaremos los dos enfoques en una vista de prueba:
 
-    ```python
-    # Codigo limpio en el Script Transform de Perspective
-    return project.ui.transforms.format_equipment_status_card(value)
-    ```
-6. **Verificación:** Comprobar que el componente se actualiza inmediatamente al cambiar el valor del tag de origen, sin latencia ni congelamiento visual
+#### Alternativa A (Didáctica / Enriquecimiento Complejo con Script Transform):
+1. En una vista de Perspective, añadir un contenedor con un Label.
+2. En una propiedad `custom.equipmentData`, vincular el tag de origen.
+3. Añadir un **Script Transform** al binding:
+   ```python
+   # Script Transform de 1 sola linea delegada
+   return project.ui.transforms.format_equipment_status_card(value)
+   ```
+
+#### Alternativa B (Estándar Óptimo de Producción SCADA - Sin Scripting):
+1. **Crear Perspective Style Classes (CSS nativo):**
+   * En el Project Browser -> **Perspective -> Styles**, crear la carpeta `Equipment` con las clases:
+     * `Equipment/Running`: fondo `#27ae60`, texto blanco.
+     * `Equipment/Alarm`: fondo `#e74c3c`, texto blanco, animación blink.
+     * `Equipment/Maintenance`: fondo `#f39c12`, texto negro.
+     * `Equipment/Standby`: fondo `#95a5a6`, texto negro.
+2. **Configurar Map Transform directo en la propiedad `props.style.classes` del componente:**
+   * Crear un **Tag Binding** directo al tag de estado entero (`status_code`).
+   * Añadir un **Map Transform** nativo de Perspective:
+     * `1` ➔ `Equipment/Running`
+     * `2` ➔ `Equipment/Alarm`
+     * `3` ➔ `Equipment/Maintenance`
+     * `0` ➔ `Equipment/Standby`
+     * `Fallback` ➔ `Equipment/Unknown`
+3. **Conclusión y Verificación:**
+   * La alternativa B no ejecuta ni una sola línea de código en el Gateway, delega el renderizado al CSS del cliente web y es la arquitectura exigida en entornos OT.
+
+***
 
 ***
 

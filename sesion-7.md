@@ -375,18 +375,18 @@ flowchart LR
 
 ***
 
-### 5. Laboratorio 7.2: Motor de Turnos Industriales, Fechas SQL y Dashboard en Perspective
+### 5. Laboratorio 7.2: Motor de Turnos Industriales, Fechas SQL y Dashboard en Perspective (Evaluación Crítica Script vs Nativo)
 
 #### Objetivos
 
 * Construir un módulo en `Project Library` (`project.util.shifts`) capaz de determinar el identificador del turno actual, su nombre funcional y el día operativo correspondiente a partir de cualquier marca temporal.
 * Resolver la discontinuidad de la medianoche en turnos nocturnos e integrar consultas SQL sargables pasando objetos `Date` nativos.
-* Diseñar un dashboard en Perspective (`Views/Laboratorios/Lab7_2_ShiftDashboard`) con scripts de 1 línea para visualizar KPIs de turno y actuaciones filtradas.
+* Diseñar un dashboard en Perspective (`Views/Laboratorios/Lab7_2_ShiftDashboard`) contrastando el uso de scripts frente a las funcionalidades nativas de Ignition (*Style Classes*, *Map Transforms* y *Expression Bindings*).
 
 #### Resultado esperado
 
 * Módulo de turnos validado ante marcas temporales diurnas y de madrugada.
-* Dashboard en Perspective con tarjetas que cambian de color según el turno (Azul/Naranja/Púrpura), alertan del día operativo y filtran la tabla de intervenciones sin desajustes horarios.
+* Dashboard en Perspective con tarjetas KPI comparando la implementación por Script Transform frente a la solución óptima nativa con Map Transforms y Style Classes (reduciendo carga en el Gateway).
 
 #### Paso a Paso para la Realización
 
@@ -394,7 +394,15 @@ flowchart LR
 En **Server Scripting -> Project Library**, crear `util.shifts`:
 
 ```python
-"""Modulo: project.util.shifts"""
+"""
+Modulo: project.util.shifts
+Descripcion: Motor de calculo de turnos industriales y fechas operativas.
+
+NOTA DE ARQUITECTURA INDUSTRIAL:
+La logica de turnos complejos y rangos temporales en Project Library es el lugar
+ideal para Python. Sin embargo, para la presentacion en Perspective (colores y etiquetas),
+se debe priorizar Map Transforms + Style Classes y Expression Bindings en produccion.
+"""
 from java.util import Calendar
 
 def get_shift_window(target_date=None):
@@ -439,32 +447,29 @@ def query_shift_actions(shift_window, equip=None, db_conn="DB_Admin"):
     sql += " ORDER BY DataHora DESC"
     return system.db.runPrepQuery(sql, args, database=db_conn)
 
-# --- Funciones auxiliares para scripts de 1 línea en Perspective ---
+# --- Funciones auxiliares de presentacion (Comparativa Script vs Nativo) ---
 def get_shift_badge_style(shift_id):
+    """Ilustra diccionarios en Python. En produccion usar Map Transform + Style Classes."""
     colors = {1: "#2980b9", 2: "#d35400", 3: "#4a148c"}
     return colors.get(shift_id, "#7f8c8d")
 
 def format_shift_window_label(shift_window):
+    """En produccion SCADA se puede resolver con Expression Binding dateFormat()."""
     if not shift_window:
         return "---"
-    start = shift_window["start_date"] if "start_date" in shift_window else shift_window.get("start_date")
-    end = shift_window["end_date"] if "end_date" in shift_window else shift_window.get("end_date")
+    start = shift_window.get("start_date")
+    end = shift_window.get("end_date")
     if start and end:
         try:
-            start_str = system.date.format(start, "HH:mm")
+            return "Horario: {}h - {}h".format(system.date.format(start, "HH:mm"), system.date.format(end, "HH:mm"))
         except Exception:
-            start_str = str(start)
-        try:
-            end_str = system.date.format(end, "HH:mm")
-        except Exception:
-            end_str = str(end)
-        return "Horario: {}h - {}h".format(start_str, end_str)
+            return "---"
     return "---"
 
 def get_shift_operational_note(shift_window):
     if not shift_window:
         return ""
-    shift_id = shift_window["shift_id"] if "shift_id" in shift_window else shift_window.get("shift_id")
+    shift_id = shift_window.get("shift_id")
     if shift_id == 3:
         return "Turno Noche: Horas de madrugada imputadas a la fecha de inicio"
     elif shift_id in (1, 2):
@@ -513,12 +518,17 @@ print "\n2. Filas obtenidas para Table.props.data:", len(table_data)
    ```python
    self.view.custom.shiftMeta = util.shifts.get_shift_window(None)
    ```
-3. **Banner KPI (Scripts de 1 línea en Transforms):**
-   * Color de fondo Tarjeta Turno: `return util.shifts.get_shift_badge_style(value)`
-   * Texto Tarjeta Día Operativo: `return util.shifts.get_shift_operational_note(value)`
-   * Texto Tarjeta Horario: `return util.shifts.format_shift_window_label(value)`
+3. **Banner KPI (Comparativa Scripting vs Funcionalidades Nativas):**
+   * **Tarjeta Turno (Color/Estilo):**
+     * *Opción A (Script):* En `props.style.backgroundColor`: `return util.shifts.get_shift_badge_style(value)`
+     * *Opción B (Nativo Recomendado):* En `props.style.classes`, usar un **Map Transform** nativo vinculado a Style Classes (`Shifts/Morning`, `Shifts/Afternoon`, `Shifts/Night`). Evita ciclos de CPU de Jython en el Gateway.
+   * **Tarjeta Horario (Etiqueta de Fechas):**
+     * *Opción A (Script):* `return util.shifts.format_shift_window_label(value)`
+     * *Opción B (Nativo Recomendado):* **Expression Binding** nativo:
+       `concat("Horario: ", dateFormat({view.custom.shiftMeta.start_date}, "HH:mm"), "h - ", dateFormat({view.custom.shiftMeta.end_date}, "HH:mm"), "h")`
+   * **Tarjeta Día Operativo:** En `props.text`: `return util.shifts.get_shift_operational_note(value)`
 4. **Controles y Tabla:**
-   * **Dropdown** (`drop_Equipo`): Binding bidireccional a `view.custom.selectedEquip`: `LINEA_ENVASADO_01`, `EDAR_COMPRESOR_02`, `DECANTADOR_01`, `EDAR_BOMBA_02`, `EDAR_BOMBA_01`, `VALVULA_RECIRC_01`, `EDAR_COMPRESOR_01`, `LINEA_ENVASADO_02`.
+   * **Dropdown** (`drop_Equipo`): Binding bidireccional a `view.custom.selectedEquip`.
    * Botón Evaluar Simulación (`btn_Evaluar -> onActionPerformed` - 2 líneas):
      ```python
      target = self.getSibling("dt_Simulador").props.value
@@ -532,6 +542,7 @@ print "\n2. Filas obtenidas para Table.props.data:", len(table_data)
      ```python
      return util.shifts.format_shift_actions_table(value, equip=self.view.custom.selectedEquip)
      ```
+     *(Nota: En producción, para tablas masivas sin enriquecimiento de negocio, priorizar un Query Binding nativo a una Named Query).*
 
 **Paso 4: Verificación Interactiva**
 En el DateTime Picker, seleccionar las 03:30h: comprobar que el turno cambia a púrpura (`TURNO_NOCHE`), el día operativo retrocede 1 día y la tabla carga las actuaciones de esa franja nocturna.
