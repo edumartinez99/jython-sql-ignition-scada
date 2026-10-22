@@ -391,9 +391,6 @@ def format_cache_stats_table(stats_dict):
     if not stats_dict: return []
     return [{"Clave": k, "Edad_Segundos": "{} s".format(v.get("age_seconds", 0)), "Total_Hits_RAM": v.get("total_hits", 0)} for k, v in stats_dict.items()]
 
-def get_source_badge_style(source_str):
-    return "#27ae60" if "CACHE HIT" in str(source_str) else "#2980b9"
-
 # --- Funciones para Gateway Event Scripts (Timer y Tag Change) ---
 def warmup_catalog_cache(ttl_seconds=120):
     return get_or_set("cat_setpoints", fetch_catalog_setpoints, ttl_seconds=ttl_seconds)
@@ -407,10 +404,10 @@ def invalidate_on_tag_trigger(tag_path, reset_flag=True):
 
 **Paso 2: Validación en Script Console**
 ```python
-project.util.cache.clear_cache("cat_setpoints")
-res1 = project.util.cache.query_setpoints_cached_ui(ttl_seconds=5)
+util.cache.clear_cache("cat_setpoints")
+res1 = util.cache.query_setpoints_cached_ui(ttl_seconds=5)
 print "Llamada 1 (MISS):", res1["source"], "| Tiempo:", res1["elapsed_ms"], "ms"
-res2 = project.util.cache.query_setpoints_cached_ui(ttl_seconds=5)
+res2 = util.cache.query_setpoints_cached_ui(ttl_seconds=5)
 print "Llamada 2 (HIT): ", res2["source"], "| Tiempo:", res2["elapsed_ms"], "ms (Aceleracion > 500x)"
 ```
 
@@ -419,27 +416,28 @@ print "Llamada 2 (HIT): ", res2["source"], "| Tiempo:", res2["elapsed_ms"], "ms 
    * `custom.ttlSeconds`: `10`
    * `custom.lastResult`: `{}`
    * `custom.statusMessage`: `""`
-2. **Banner KPI (Transforms de 1 línea):**
-   * Tarjeta Origen `backgroundColor`: `return project.util.cache.get_source_badge_style(value)`
+2. **Banner KPI:**
+   * Tarjeta Origen: Binding a `view.custom.lastResult.source` (muestra `"MEMORIA RAM (CACHE HIT)"` o `"BASE DE DATOS SQL (CACHE MISS)"`).
    * Tarjeta Latencia: Binding a `view.custom.lastResult.elapsed_ms` (ej. `0.035 ms` vs `22.4 ms`).
+   * Tarjeta Hits: Binding a `view.custom.lastResult.hits`.
 3. **Botones y Tablas:**
    * Botón Consultar (`btn_Consultar -> onActionPerformed` - 2 líneas):
      ```python
      ttl = self.getSibling("num_TTL").props.value
-     self.view.custom.lastResult = project.util.cache.query_setpoints_cached_ui(ttl_seconds=ttl)
+     self.view.custom.lastResult = util.cache.query_setpoints_cached_ui(ttl_seconds=ttl)
      ```
    * Botón Invalidar (`btn_Invalidar -> onActionPerformed` - 2 líneas):
      ```python
-     project.util.cache.clear_cache("cat_setpoints")
+     util.cache.clear_cache("cat_setpoints")
      self.view.custom.statusMessage = "Caché invalidada en memoria RAM"
      ```
    * Tabla Catálogo (`table_Catalogo.props.data` Transform - 1 línea):
      ```python
-     return project.util.cache.format_setpoints_table(value)
+     return util.cache.format_setpoints_table(value)
      ```
    * Tabla Estadísticas (`table_Stats.props.data` Transform - 1 línea):
      ```python
-     return project.util.cache.format_cache_stats_table(project.util.cache.get_cache_stats())
+     return util.cache.format_cache_stats_table(util.cache.get_cache_stats())
      ```
 
 **Paso 4: Verificación Interactiva**
