@@ -128,21 +128,23 @@ flowchart TD
 3. **Named Query 1: `Actuacions/Consulta_NoOptimizada`**
    * **Database:** `DB_Admin`
    * **Query Type:** *Query*
-   * **Parameters:** Añadir parámetro `targetYear` (Tipo: `Integer`, valor de prueba: `2026`).
+   * **Parameters:** Añadir parámetro `targetYear` (Tipo: `Integer`, valor de prueba: `2026`), `targetMonth` (Tipo: `Integer`, valor de prueba: `09`), `targetDay` (Tipo: `Integer`, valor de prueba: `28`).
    * **SQL Query:**
      ```sql
      -- ANTI-PATRÓN: SELECT * y función EXTRACT en WHERE (Full Table Scan)
      SELECT * 
      FROM ins_Registre_Actuacions 
-     WHERE EXTRACT(YEAR FROM DataHora) = :targetYear
+     WHERE EXTRACT(DAY FROM DataHora) = :targetDay
+     AND EXTRACT(MONTH FROM DataHora) = :targetMonth
+     AND EXTRACT(YEAR FROM DataHora) = :targetYear
      ORDER BY DataHora DESC
      ```
 4. **Named Query 2: `Actuacions/Consulta_Optimizada`**
    * **Database:** `DB_Admin`
    * **Query Type:** *Query*
    * **Parameters:**
-     * `startDate` (Tipo: `DateTime`, valor de prueba: `2026-01-01 00:00:00`)
-     * `endDate` (Tipo: `DateTime`, valor de prueba: `2027-01-01 00:00:00`)
+     * `startDate` (Tipo: `DateTime`, valor de prueba: `2026-09-28 00:00:00`)
+     * `endDate` (Tipo: `DateTime`, valor de prueba: `2026-09-29 00:00:00`)
    * **SQL Query:**
      ```sql
      -- ESTÁNDAR SARGABLE: Proyección estricta + Rango temporal limpio sobre índice B-Tree
@@ -161,9 +163,11 @@ flowchart TD
 1. En **Perspective -> Views**, crear la vista `Laboratorios/Lab8_1_SQLBenchmark` (`Flex Container`, `column`).
 2. Configurar las propiedades personalizadas en la vista (**custom**):
    * `custom.queryMode`: `"OPTIMIZADA"` (string: `"NO_OPTIMIZADA"` o `"OPTIMIZADA"`)
-   * `custom.startDate`: `"2026-01-01 00:00:00"` (string o Date)
-   * `custom.endDate`: `"2027-01-01 00:00:00"` (string o Date)
+   * `custom.startDate`: `"2026-09-28 00:00:00"` (string o Date)
+   * `custom.endDate`: `"2026-09-29 00:00:00"` (string o Date)
    * `custom.targetYear`: `2026` (integer)
+   * `custom.targetMonth`: `09` (integer)
+   * `custom.targetDay`: `28` (integer)
    * `custom.latencyLabel`: `"Selecciona un modo y pulsa 'Ejecutar Consulta'"` (string)
 
 **Paso 4: Configuración de la Tabla con Query Binding Nativo**
@@ -172,8 +176,8 @@ flowchart TD
 3. Seleccionar **Query -> Named Query**:
    * **Path:** `Actuacions/Consulta_Optimizada`
    * **Parameters:**
-     * `startDate` $\rightarrow$ Binding a `view.custom.startDate`
-     * `endDate` $\rightarrow$ Binding a `view.custom.endDate`
+     * `startDate` $\rightarrow$ Binding a `{view.custom.startDate}`
+     * `endDate` $\rightarrow$ Binding a `{view.custom.endDate}`
 4. Pulsa **OK**. La tabla carga directamente los registros desde base de datos sin ejecutar una sola línea de script en el cliente.
 
 **Paso 5: Controles de Prueba y Medición de Latencia en el Label**
@@ -194,7 +198,9 @@ flowchart TD
      mode = self.view.custom.queryMode
 
      if mode == "NO_OPTIMIZADA":
-         params = {"targetYear": self.view.custom.targetYear}
+         params = {"targetYear": self.view.custom.targetYear,
+         "targetMonth": self.view.custom.targetMonth,
+         "targetDay": self.view.custom.targetDay}
          query_path = "Actuacions/Consulta_NoOptimizada"
      else:
          params = {"startDate": self.view.custom.startDate, "endDate": self.view.custom.endDate}
