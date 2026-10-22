@@ -334,142 +334,458 @@ flowchart TD
 * Monitor en Perspective donde la primera consulta indica `CACHE MISS (SQL - ~20 ms)` y las siguientes `CACHE HIT (RAM - < 0.05 ms)`, con botón para invalidar manualmente la memoria.
 * Gateway autónomo donde un Timer Script mantiene la caché caliente cada 60 s y un Tag Change Script sobre `[default]Config/ReloadCatalogs` purga la memoria reactivamente ante cambios en planta.
 
-#### Paso a Paso para la Realización
+#### 4. Paso a Paso para la Realización
 
-**Paso 1: Módulo en Project Library (`project.util.cache`)**
-En **Server Scripting -> Project Library**, crear `util.cache`:
+**Paso 1: Creación del Módulo en Project Library**
+
+1. En **Ignition Designer**, navegar a **Server Scripting -> Project Library**.
+2. Crear el script: `util.cache` (carpeta `util`, script `cache`).
+
+**Paso 2: Implementación del Gestor de Caché con TTL y Funciones UI**
+
+Copiar y guardar el siguiente código en `util.cache`:
 
 ```python
-"""Modulo: project.util.cache"""
+"""
+Modulo: util.cache
+Descripcion: Gestor de cache en memoria RAM de Gateway con control de TTL (Time-To-Live),
+             invalidacion manual y funciones ligeras para Perspective.
+Autor: Equipo SCADA
+"""
 from java.lang import System
 
+# Almacen persistente en el contexto del modulo en la JVM
+# Estructura interna: {'clave': {'data': objeto, 'timestamp': epoch_ms, 'hits': int}}
 _CACHE_STORE = {}
 
 def get_or_set(cache_key, fetch_function, ttl_seconds=60, *args, **kwargs):
+    """
+    Recupera un dato de la memoria RAM si es valido o ejecuta la funcion proveedora
+    para refrescarlo y almacenarlo con timestamp actual.
+    
+    Args:
+        cache_key (str): Identificador unico del dato en cache (ej. 'cat_setpoints').
+        fetch_function (callable): Funcion proveedora si hay cache miss.
+        ttl_seconds (int): Tiempo de vida del dato en segundos.
+        
+    Returns:
+        any: El dato recuperado de memoria RAM o generado por la funcion proveedora.
+    """
     global _CACHE_STORE
-    now_ms, ttl_ms = System.currentTimeMillis(), ttl_seconds * 1000
+    logger = system.util.getLogger("SCADA.Cache")
+    
+    now_ms = System.currentTimeMillis()
+    ttl_ms = ttl_seconds * 1000
+    
+    # 1. Comprobar si la clave existe y el TTL sigue vigente (Cache Hit)
     if cache_key in _CACHE_STORE:
         entry = _CACHE_STORE[cache_key]
-        if (now_ms - entry["timestamp"]) < ttl_ms:
+        elapsed = now_ms - entry["timestamp"]
+        
+        if elapsed < ttl_ms:
             entry["hits"] += 1
+            logger.debug("Cache HIT para '{}' (Hits: {}, Edad: {} ms)".format(cache_key, entry["hits"], elapsed))
             return entry["data"]
-    data = fetch_function(*args, **kwargs)
-    _CACHE_STORE[cache_key] = {"timestamp": now_ms, "data": data, "hits": 0}
-    return data
+            
+    # 2. Si no existe o expiro el TTL (Cache Miss): Ejecutar funcion proveedora
+    logger.info("Cache MISS para '{}'. Consultando origen de datos...".format(cache_key))
+    fresh_data = fetch_function(*args, **kwargs)
+    
+    # 3. Guardar en memoria con timestamp actual
+    _CACHE_STORE[cache_key] = {
+        "timestamp": now_ms,
+        "data": fresh_data,
+        "hits": 0
+    }
+    
+    return fresh_data
+
 
 def clear_cache(cache_key=None):
+    """
+    Invalida una clave especifica o vacia la totalidad de la memoria cache.
+    """
     global _CACHE_STORE
-    if cache_key: _CACHE_STORE.pop(cache_key, None)
-    else: _CACHE_STORE.clear()
+    logger = system.util.getLogger("SCADA.Cache")
+    
+    if cache_key:
+        if cache_key in _CACHE_STORE:
+            del _CACHE_STORE[cache_key]
+            logger.info("Clave de cache eliminada: '{}'".format(cache_key))
+    else:
+        total = len(_CACHE_STORE)
+        _CACHE_STORE.clear()
+        logger.info("Cache total limpiada ({} entradas eliminadas)".format(total))
+
 
 def get_cache_stats():
+    """
+    Retorna un diccionario con el estado actual y metricas de la memoria cache.
+    """
+    global _CACHE_STORE
     now_ms = System.currentTimeMillis()
-    return {k: {"age_seconds": round((now_ms - v["timestamp"]) / 1000.0, 1), "total_hits": v["hits"]} for k, v in _CACHE_STORE.items()}
+    stats = {}
+    
+    for k, v in _CACHE_STORE.items():
+        stats[k] = {
+            "age_seconds": round((now_ms - v["timestamp"]) / 1000.0, 1),
+            "total_hits": v["hits"]
+        }
+    return stats
 
-# --- Funciones auxiliares para scripts de 1-2 líneas en Perspective ---
+
+# ==============================================================================
+# FUNCIONES AUXILIARES PARA PERSPECTIVE (Mantiene los scripts de UI en 1-2 lineas)
+# ==============================================================================
+
 def fetch_catalog_setpoints():
-    return system.db.runQuery("SELECT equip, flow_sp, pressure_sp, is_active FROM machine_setpoints WHERE is_active = TRUE", database="SANDBOX_DB")
+    """
+    Funcion proveedora real: consulta la tabla machine_setpoints en SANDBOX_DB.
+    """
+    sql = "SELECT equip, flow_sp, pressure_sp, is_active FROM machine_setpoints WHERE is_active = TRUE"
+    return system.db.runQuery(sql, database="SANDBOX_DB")
+
 
 def query_setpoints_cached_ui(ttl_seconds=10):
-    key, now_ms = "cat_setpoints", System.currentTimeMillis()
-    is_hit = key in _CACHE_STORE and (now_ms - _CACHE_STORE[key]["timestamp"]) < (ttl_seconds * 1000)
+    """
+    Consulta el catalogo de consignas midiendo el tiempo exacto y detectando
+    si la respuesta se sirvio desde RAM (HIT) o desde Base de Datos (MISS).
+    
+    Returns:
+        dict: {'data': dataset, 'source': str, 'elapsed_ms': float, 'hits': int}
+    """
+    global _CACHE_STORE
+    key = "cat_setpoints"
+    now_ms = System.currentTimeMillis()
+    ttl_ms = ttl_seconds * 1000
+    
+    # Pre-comprobacion para etiquetar HIT vs MISS
+    is_hit = False
+    if key in _CACHE_STORE:
+        if (now_ms - _CACHE_STORE[key]["timestamp"]) < ttl_ms:
+            is_hit = True
+            
     t0 = System.nanoTime()
     data = get_or_set(key, fetch_catalog_setpoints, ttl_seconds=ttl_seconds)
     t1 = System.nanoTime()
+    
+    elapsed = round((t1 - t0) / 1000000.0, 4)
+    hits = _CACHE_STORE.get(key, {}).get("hits", 0)
+    
     return {
         "data": data,
         "source": "MEMORIA RAM (CACHE HIT)" if is_hit else "BASE DE DATOS SQL (CACHE MISS)",
-        "elapsed_ms": round((t1 - t0) / 1000000.0, 4),
-        "hits": _CACHE_STORE.get(key, {}).get("hits", 0)
+        "elapsed_ms": elapsed,
+        "hits": hits
     }
 
+
 def format_setpoints_table(dataset_data):
-    if not dataset_data: return []
-    return [{"Equipo": r["equip"], "Consigna_Caudal": "{:.1f} m3/h".format(r["flow_sp"]), "Consigna_Presion": "{:.1f} bar".format(r["pressure_sp"]), "Estado": "ACTIVO" if r["is_active"] else "INACTIVO"} for r in system.dataset.toPyDataSet(dataset_data)]
+    """
+    Transforma el dataset retornado en filas estructuradas para el componente Table.
+    """
+    if dataset_data is None:
+        return []
+        
+    pyds = system.dataset.toPyDataSet(dataset_data)
+    rows = []
+    for r in pyds:
+        rows.append({
+            "Equipo": r["equip"],
+            "Consigna_Caudal": "{:.1f} m3/h".format(r["flow_sp"]),
+            "Consigna_Presion": "{:.1f} bar".format(r["pressure_sp"]),
+            "Estado": "ACTIVO" if r["is_active"] else "INACTIVO"
+        })
+    return rows
+
 
 def format_cache_stats_table(stats_dict):
-    if not stats_dict: return []
-    return [{"Clave": k, "Edad_Segundos": "{} s".format(v.get("age_seconds", 0)), "Total_Hits_RAM": v.get("total_hits", 0)} for k, v in stats_dict.items()]
+    """
+    Formatea las estadisticas de memoria cache para una tabla de Perspective.
+    """
+    if not stats_dict or not isinstance(stats_dict, dict):
+        return []
+        
+    rows = []
+    for k, v in stats_dict.items():
+        rows.append({
+            "Clave": k,
+            "Edad_Segundos": "{} s".format(v.get("age_seconds", 0)),
+            "Total_Hits_RAM": v.get("total_hits", 0)
+        })
+    return rows
 
-# --- Funciones para Gateway Event Scripts (Timer y Tag Change) ---
+
+# ==============================================================================
+# FUNCIONES PARA GATEWAY EVENT SCRIPTS (TIMER Y TAG CHANGE)
+# ==============================================================================
+
 def warmup_catalog_cache(ttl_seconds=120):
+    """
+    Ejecutado periodicamente por un Gateway Timer Script.
+    Pre-calienta y renueva la memoria en background antes de que expire el TTL,
+    garantizando que ningun operador de planta experimente la latencia de un Cache Miss.
+    """
+    logger = system.util.getLogger("SCADA.Cache.Timer")
+    logger.debug("Ejecutando warm-up de catalogo de consignas en background...")
     return get_or_set("cat_setpoints", fetch_catalog_setpoints, ttl_seconds=ttl_seconds)
 
+
 def invalidate_on_tag_trigger(tag_path, reset_flag=True):
+    """
+    Ejecutado por un Gateway Tag Change Script ante actualizacion de recetas.
+    Invalida reactivamente la cache y opcionalmente resetea el tag booleano a False.
+    """
+    logger = system.util.getLogger("SCADA.Cache.TagChange")
     clear_cache("cat_setpoints")
-    system.util.getLogger("SCADA.Cache.TagChange").info("Cache invalidada desde tag: {}".format(tag_path))
+    logger.info("Cache 'cat_setpoints' invalidada reactivamente desde tag: {}".format(tag_path))
     if reset_flag:
         system.tag.writeBlocking([tag_path], [False])
 ```
 
-**Paso 2: Validación en Script Console**
+**Paso 3: Guardar el Proyecto**
+
+1. Guardar en el Designer (**File -> Save** o `Ctrl+S`).
+
+**Paso 4: Pruebas y Validación desde la Script Console**
+
+1. Abrir la **Script Console** (**Tools -> Script Console**).
+2. Ejecutar la validación completa del gestor de caché:
+
 ```python
+print "=== VALIDACION LABORATORIO 8.2: GESTOR DE CACHE CON TTL ==="
+
+# Limpiar cache previa
 util.cache.clear_cache("cat_setpoints")
+
+# 1. Primera Llamada: Cache Miss (debe consultar la BD)
 res1 = util.cache.query_setpoints_cached_ui(ttl_seconds=5)
-print "Llamada 1 (MISS):", res1["source"], "| Tiempo:", res1["elapsed_ms"], "ms"
+print "\n1. Primera Llamada:"
+print " - Origen:     ", res1["source"]
+print " - Tiempo:     ", res1["elapsed_ms"], "ms"
+print " - Hits en RAM:", res1["hits"]
+
+# 2. Segunda Llamada Inmediata: Cache Hit (debe resolver desde RAM)
 res2 = util.cache.query_setpoints_cached_ui(ttl_seconds=5)
-print "Llamada 2 (HIT): ", res2["source"], "| Tiempo:", res2["elapsed_ms"], "ms (Aceleracion > 500x)"
+print "\n2. Segunda Llamada Inmediata:"
+print " - Origen:     ", res2["source"]
+print " - Tiempo:     ", res2["elapsed_ms"], "ms"
+print " - Hits en RAM:", res2["hits"]
+
+# 3. Formateo para Perspective Table
+rows = util.cache.format_setpoints_table(res2["data"])
+print "\n3. Filas formateadas para Perspective Table:", len(rows)
 ```
 
-**Paso 3: Monitor de Caché en Perspective (`Views/Laboratorios/Lab8_2_CacheMonitor`)**
-1. Crear la vista `Lab8_2_CacheMonitor` (`Flex Container`, `column`) con propiedades `custom`:
-   * `custom.ttlSeconds`: `10`
-   * `custom.lastResult`: `{}`
-   * `custom.statusMessage`: `""`
-2. **Banner KPI:**
-   * Tarjeta Origen: Binding a `view.custom.lastResult.source` (muestra `"MEMORIA RAM (CACHE HIT)"` o `"BASE DE DATOS SQL (CACHE MISS)"`).
-   * Tarjeta Latencia: Binding a `view.custom.lastResult.elapsed_ms` (ej. `0.035 ms` vs `22.4 ms`).
-   * Tarjeta Hits: Binding a `view.custom.lastResult.hits`.
-3. **Botones y Tablas:**
-   * Botón Consultar (`btn_Consultar -> onActionPerformed` - 2 líneas):
+**Paso 5: Salida Esperada en Consola**
+
+```
+=== VALIDACION LABORATORIO 8.2: GESTOR DE CACHE CON TTL ===
+
+1. Primera Llamada:
+ - Origen:      BASE DE DATOS SQL (CACHE MISS)
+ - Tiempo:      22.45 ms
+ - Hits en RAM: 0
+
+2. Segunda Llamada Inmediata:
+ - Origen:      MEMORIA RAM (CACHE HIT)
+ - Tiempo:      0.038 ms
+ - Hits en RAM: 1
+
+3. Filas formateadas para Perspective Table: 4
+```
+
+***
+
+**Paso 6: Arquitectura y Creación del Monitor de Caché en Perspective (`Lab8_2_CacheMonitor`)**
+
+El monitor en Perspective permite visualizar en tiempo real la drástica diferencia entre el acceso a disco SQL y la lectura en memoria RAM. Todos los componentes de Perspective se mantienen en **1 o 2 líneas**, delegando en `util.cache`.
+
+```mermaid
+flowchart TD
+    subgraph Vista_Perspective [Perspective: Views/Laboratorios/Lab8_2_CacheMonitor]
+        direction TB
+        subgraph UI_Controls [Controles: 1-2 Líneas]
+            NumTTL[num_TTL: Tiempo de Vida en Segundos]
+            BtnFetch[btn_Consultar: onActionPerformed -> 2 Líneas]
+            BtnClear[btn_Invalidar: onActionPerformed -> 2 Líneas]
+        end
+        subgraph UI_KPIs [Banner KPI de Rendimiento]
+            CardSource[kpi_Origen: Origen RAM vs SQL]
+            CardLatency[kpi_Latencia: Tiempo de Respuesta en ms]
+            CardHits[kpi_Hits: Contador de Cache Hits]
+        end
+        subgraph UI_Tables [Tablas de Datos: 1 Línea]
+            TableCatalogo[table_Catalogo: props.data Transform -> 1 Línea]
+            TableStats[table_Stats: props.data Transform -> 1 Línea]
+        end
+    end
+
+    subgraph Gateway_Events [Gateway Event Scripts: Automatización Desatendida]
+        TimerWarmup[Gateway Timer Script: warmup_catalog_cache cada 60s]
+        TagTrigger[Gateway Tag Change Script: [default]Config/ReloadCatalogs]
+    end
+
+    subgraph Backend_Library [Project Library: util.cache]
+        BtnFetch -->|query_setpoints_cached_ui ttl| CoreCache[query_setpoints_cached_ui / get_or_set]
+        BtnClear -->|clear_cache key| ClearLib[clear_cache]
+        TimerWarmup -->|Pre-calentamiento periódico en background| CoreCache
+        TagTrigger -->|Invalidación reactiva por flanco de tag| ClearLib
+        CoreCache -->|Cache Miss| DBPostgres[(machine_setpoints en SANDBOX_DB)]
+        CoreCache -->|Cache Hit| JVMRAM[Memoria RAM JVM: _CACHE_STORE]
+        TableCatalogo -->|format_setpoints_table value| FormatCat[format_setpoints_table]
+        TableStats -->|format_cache_stats_table stats| FormatStats[format_cache_stats_table]
+    end
+```
+
+1. En el **Project Browser**, navegar a **Perspective -> Views**.
+2. Crear la vista `Laboratorios/Lab8_2_CacheMonitor` con `Root Container Type: Flex Container` y `props.direction: column`.
+3. Crear las propiedades personalizadas en la vista (**custom**):
+
+| Propiedad Custom | Tipo | Valor Inicial | Descripción |
+| :--- | :--- | :--- | :--- |
+| `custom.ttlSeconds` | `number` | `10` | Tiempo de vida del dato en memoria RAM |
+| `custom.lastResult` | `object` | `{}` | Almacén reactivo de la última consulta de caché |
+| `custom.statusMessage` | `string` | `"Listo para consultar"` | Mensaje informativo para el operador |
+
+**Paso 7: Vinculación del Banner KPI de Caché**
+
+1. Añadir un **Flex Container** horizontal (`banner_kpi`) con estilo: `display: flex`, `justifyContent: space-around`, `gap: 16px`, `margin: 12px 0`.
+2. Añadir 3 tarjetas KPI dentro del contenedor:
+
+   * **Tarjeta 1: Origen del Dato (`kpi_Origen`):**
+     * Label principal con binding a `view.custom.lastResult.source`.
+     * Texto descriptivo secundario: `"Origen del Dato (RAM vs SQL)"`.
+
+   * **Tarjeta 2: Latencia de Respuesta (`kpi_Latencia`):**
+     * Label con binding a `view.custom.lastResult.elapsed_ms` formateado (ej. `0.035 ms` vs `22.40 ms`).
+     * Texto descriptivo secundario: `"Tiempo de Acceso al Dato"`.
+
+   * **Tarjeta 3: Hits en Memoria RAM (`kpi_Hits`):**
+     * Label con binding a `view.custom.lastResult.hits`.
+     * Texto descriptivo secundario: `"Peticiones servidas sin tocar la BD"`.
+
+**Paso 8: Configuración de la Barra de Controles y Tablas de Perspective**
+
+1. Añadir una barra horizontal de herramientas (`toolbar_cache`):
+   * **Numeric Entry Field** (`num_TTL`):
+     * `props.value`: `10`
+     * Label: `"TTL (Segundos)"`.
+   * **Button** (`btn_Consultar`):
+     * `props.text`: `"CONSULTAR CATÁLOGO (get_or_set)"`.
+     * `style.backgroundColor`: `"#27ae60"`, `style.color`: `"#ffffff"`.
+     * En `events -> onActionPerformed`, añadir la acción **Script (2 líneas exactas)**:
+
+```python
+# Evento onActionPerformed en btn_Consultar (2 lineas)
+ttl = self.getSibling("num_TTL").props.value
+self.view.custom.lastResult = util.cache.query_setpoints_cached_ui(ttl_seconds=ttl)
+```
+
+   * **Button** (`btn_Invalidar`):
+     * `props.text`: `"INVALIDAR CACHÉ (clear_cache)"`.
+     * `style.backgroundColor`: `"#c0392b"`, `style.color`: `"#ffffff"`.
+     * En `events -> onActionPerformed`, añadir la acción **Script (2 líneas exactas)**:
+
+```python
+# Evento onActionPerformed en btn_Invalidar (2 lineas)
+util.cache.clear_cache("cat_setpoints")
+self.view.custom.statusMessage = "Caché invalidada manualmente en la memoria RAM del Gateway"
+```
+
+2. Añadir el componente **Table** (`table_Catalogo`) para visualizar las consignas:
+   * En `props.data`, binding vinculado a `view.custom.lastResult.data`.
+   * Añadir un **Script Transform de 1 línea**:
+
+```python
+# Script Transform en props.data de table_Catalogo (1 linea)
+return util.cache.format_setpoints_table(value)
+```
+
+3. Añadir una sub-tabla para monitorizar el estado de la memoria (`table_Stats`):
+   * En `props.data`, binding a `view.custom.lastResult` con un **Script Transform de 1 línea**:
+
+```python
+# Script Transform en props.data de table_Stats (1 linea)
+return util.cache.format_cache_stats_table(util.cache.get_cache_stats())
+```
+
+**Paso 9: Verificación Interactiva en Perspective Workstation / Navegador**
+
+1. Lanzar la vista en el navegador o activar el Modo Preview (`Ctrl+P`).
+2. **Pulsación 1 (Cache Miss):**
+   * Pulsar **CONSULTAR CATÁLOGO**.
+   * Comprobar que la tarjeta de origen indica `BASE DE DATOS SQL (CACHE MISS)` y la latencia ronda los `20 ms`.
+3. **Pulsaciones 2, 3 y 4 (Cache Hits sucesivos):**
+   * Pulsar repetidamente **CONSULTAR CATÁLOGO** antes de que transcurran 10 segundos.
+   * Observar cómo el indicador reporta instantáneamente `MEMORIA RAM (CACHE HIT)`, mientras la latencia cae a cifras de entre `0.02 ms` y `0.04 ms` (una aceleración de más de 500x) y el contador de hits incrementa en cada clic.
+4. **Invalidación y expiración de TTL:**
+   * Pulsar **INVALIDAR CACHÉ** o esperar a que transcurran más de 10 segundos.
+   * Volver a pulsar **CONSULTAR CATÁLOGO** y verificar cómo el sistema detecta la ausencia del dato en RAM y realiza limpiamente una nueva consulta a PostgreSQL.
+
+***
+
+**Paso 10: Integración en Gateway Event Scripts (Timer Script & Tag Change Script)**
+
+Para alcanzar una arquitectura de nivel de producción en plantas industriales, la gestión de la memoria no debe delegarse únicamente a las acciones de los usuarios en Perspective. El Gateway debe gobernar la caché de manera proactiva y reactiva:
+
+#### 10.1 Patrón A: Gateway Timer Script (Pre-calentamiento y Refresco Periódico en Background)
+
+* **Objetivo industrial (*Cache Warm-Up*):** Evitar que los operadores sufran la latencia de un *Cache Miss* (~20-50 ms) tras expirar el TTL. Un temporizador en el Gateway ejecuta la consulta en segundo plano, manteniendo los datos permanentemente calientes en la memoria RAM para que cualquier cliente web o sesión de Perspective experimente un *Cache Hit* instantáneo (< 0.05 ms).
+* **Configuración en Ignition Designer:**
+  1. En el **Project Browser**, navegar a **Server Scripting -> Gateway Event Scripts**.
+  2. Seleccionar la categoría **Timer**.
+  3. Pulsar en el icono de suma (**+**) para crear un nuevo Timer Script:
+     * **Name:** `Timer_Warmup_Setpoints`
+     * **Delay (ms):** `60000` (se ejecuta cada 60 segundos)
+     * **Initial Delay (ms):** `5000` (espera 5 segundos tras el arranque del Gateway)
+     * **Threading:** Seleccionar **Dedicated** (*Regla de Oro en Gateway:* Las tareas que realizan consultas a base de datos deben utilizar un hilo dedicado para nunca bloquear el pool compartido *Shared*).
+  4. En el área de código, invocar la función de pre-calentamiento en 1 línea:
      ```python
-     ttl = self.getSibling("num_TTL").props.value
-     self.view.custom.lastResult = util.cache.query_setpoints_cached_ui(ttl_seconds=ttl)
+     # Gateway Event Scripts -> Timer Script: Timer_Warmup_Setpoints
+     # Delay: 60,000 ms (60 s) | Threading: Dedicated
+     util.cache.warmup_catalog_cache(ttl_seconds=120)
      ```
-   * Botón Invalidar (`btn_Invalidar -> onActionPerformed` - 2 líneas):
+  > [!TIP]
+  > **Técnica del Solapamiento de TTL:** Obsérvese que el temporizador se ejecuta cada `60 s`, pero el TTL se fija en `120 s`. Esta holgura asegura que la clave en memoria nunca expire; la recarga ocurre silenciosamente en segundo plano mientras el dato anterior sigue vigente, garantizando una tasa de acierto del 100% (*Zero Cache Miss*) para todos los puestos de operación.
+
+#### 10.2 Patrón B: Gateway Tag Change Script (Invalidación Reactiva Guiada por Eventos)
+
+* **Objetivo industrial (*Event-Driven Invalidation*):** Si un autómata PLC, un lote de producción, un sistema MES o una pantalla de administración actualiza las consignas en base de datos, no es seguro esperar a que caduque el temporizador o el TTL. Un tag disparador de control (`[default]Config/ReloadCatalogs`) o un tag de versión de receta (`[default]Config/RecipeVersion`) notifica al Gateway para purgar la caché de inmediato.
+* **Fase 1: Creación del Memory Tag Disparador:**
+  1. En el **Tag Browser**, crear una carpeta `Config` dentro del Tag Provider `[default]`.
+  2. Crear un nuevo Memory Tag:
+     * **Tag Name:** `ReloadCatalogs`
+     * **Data Type:** `Boolean`
+     * **Value:** `false`
+* **Fase 2: Configuración del Gateway Tag Change Script:**
+  1. En el **Project Browser**, ir a **Server Scripting -> Gateway Event Scripts**.
+  2. Seleccionar la categoría **Tag Change**.
+  3. Pulsar en **+** para crear un nuevo script:
+     * **Name:** `TagChange_Invalidate_Setpoints`
+     * **Tag Paths:** Añadir la ruta `[default]Config/ReloadCatalogs`
+  4. En el editor de script, programar la detección de flanco ascendente y delegar la invalidación:
      ```python
-     util.cache.clear_cache("cat_setpoints")
-     self.view.custom.statusMessage = "Caché invalidada en memoria RAM"
-     ```
-   * Tabla Catálogo (`table_Catalogo.props.data` Transform - 1 línea):
-     ```python
-     return util.cache.format_setpoints_table(value)
-     ```
-   * Tabla Estadísticas (`table_Stats.props.data` Transform - 1 línea):
-     ```python
-     return util.cache.format_cache_stats_table(util.cache.get_cache_stats())
+     # Gateway Event Scripts -> Tag Change Script: TagChange_Invalidate_Setpoints
+     # Tag Path suscrito: [default]Config/ReloadCatalogs
+     if not initialChange and currentValue.value:
+         # Invalida la cache de consignas y resetea automaticamente el tag disparador a False
+         util.cache.invalidate_on_tag_trigger(event.tagPath.toString(), reset_flag=True)
      ```
 
-**Paso 4: Verificación Interactiva**
-Lanzar en Preview (`Ctrl+P`): la primera pulsación muestra `CACHE MISS` (~20 ms); las pulsaciones siguientes muestran `CACHE HIT` (< 0.05 ms) incrementando los hits sin tocar PostgreSQL.
+#### 10.3 Verificación de la Automatización en Tiempo Real
 
-**Paso 5: Automatización en Gateway Event Scripts (Timer Script y Tag Change Script)**
-
-1. **Gateway Timer Script (Pre-calentamiento / Warm-Up en Background):**
-   * En **Server Scripting -> Gateway Event Scripts -> Timer**, crear `Timer_Warmup_Setpoints`:
-     * **Delay:** `60000` ms (cada 60 segundos).
-     * **Threading:** `Dedicated` (evita bloquear el hilo compartido del Gateway).
-     * **Script (1 línea):**
-       ```python
-       # Pre-calienta la cache con TTL de 120s cada 60s (Zero Cache Miss para usuarios)
-       project.util.cache.warmup_catalog_cache(ttl_seconds=120)
-       ```
-
-2. **Gateway Tag Change Script (Invalidación Reactiva por Flanco de Tag):**
-   * Crear Memory Tag `[default]Config/ReloadCatalogs` (tipo `Boolean`, valor `false`).
-   * En **Server Scripting -> Gateway Event Scripts -> Tag Change**, crear `TagChange_Invalidate_Setpoints`:
-     * **Tag Paths:** `[default]Config/ReloadCatalogs`
-     * **Script (2 líneas):**
-       ```python
-       # Detecta flanco ascendente del tag y purga la memoria RAM reactivamente
-       if not initialChange and currentValue.value:
-           project.util.cache.invalidate_on_tag_trigger(event.tagPath.toString(), reset_flag=True)
-       ```
-
-3. **Verificación:**
-   * En Preview de Perspective, verificar que la consulta responde con `CACHE HIT` por el pre-calentamiento.
-   * Cambiar `[default]Config/ReloadCatalogs` a `true` en el Tag Browser: se resetea solo a `false` inmediatamente.
-   * Volver a consultar en la vista: el origen cambia limpiamente a `CACHE MISS` (recarga desde PostgreSQL) y la siguiente vuelve a ser `CACHE HIT`.
+1. Abrir la vista `Lab8_2_CacheMonitor` en Perspective en modo Preview (`Ctrl+P`).
+2. Pulsar **CONSULTAR CATÁLOGO**: comprobar que se encuentra en `CACHE HIT (MEMORIA RAM)` gracias al temporizador en background.
+3. En el Designer, abrir el **Tag Browser** y modificar el valor de `[default]Config/ReloadCatalogs` a `true`:
+   * Verificar que en milisegundos el tag regresa automáticamente a `false` (reseteo completado por `writeBlocking`).
+4. Consultar los registros del Gateway (**Gateway Web -> Status -> Diagnostics -> Logs**):
+   ```
+   INFO  [SCADA.Cache.TagChange] Cache 'cat_setpoints' invalidada reactivamente desde tag: [default]Config/ReloadCatalogs
+   ```
+5. Regresar a la vista de Perspective y pulsar **CONSULTAR CATÁLOGO**:
+   * La tarjeta conmuta inmediatamente a `BASE DE DATOS SQL (CACHE MISS)` con latencia de ~20 ms, demostrando que la caché fue purgada en el instante exacto del pulso del tag.
+   * La pulsación siguiente vuelve a responder en < 0.05 ms como `CACHE HIT`, restableciendo la alta velocidad.
 
 ***
 
