@@ -294,9 +294,11 @@ flowchart TD
        $$\text{now\_ms} - \text{timestamp} < \text{TTL\_ms}$$
     3. **Cache Hit (Acierto de Caché):** Se devuelve de forma inmediata el dato residente en memoria RAM. Tiempo de respuesta: **< 0,05 ms** (cero consultas SQL, cero consumo de conexiones JDBC y cero latencia de red).
     4. **Cache Miss (Fallo o Expiración):** Se invoca la función original de extracción (`fetch_function`), se almacena el nuevo resultado junto con la marca temporal actual (`System.currentTimeMillis()`) y se retorna el dato fresco. Tiempo de respuesta: ~15 a 50 ms (únicamente en la primera ejecución o tras la caducidad del TTL).
-* **Estrategias de invalidación de caché:**
+* **Estrategias de invalidación y mantenimiento de caché:**
   * *Expiración automática por tiempo (TTL):* Refresco periódico desatendido garantizado (ej. cada 60 segundos o 10 minutos).
   * *Invalidación proactiva manual (*Cache Invalidation*):* Invocación de `clear_cache(cache_key)` inmediatamente después de que un operador guarde una modificación en la pantalla de recetas o consignas, forzando a que la siguiente lectura recargue los datos frescos de la base de datos sin demoras.
+  * *Pre-calentamiento desatendido mediante Gateway Timer Scripts (*Cache Warm-Up*):* Para erradicar la penalización por fallo de caché (*Cache Miss Penalty*) que sufre el primer operador tras expirar el TTL, un temporizador en el Gateway ejecuta periódicamente la consulta en segundo plano con un hilo dedicado (`Dedicated Thread Pool`), manteniendo los datos permanentemente calientes en RAM con latencia cero (< 0.05 ms) para todos los clientes conectados.
+  * *Invalidación reactiva guiada por eventos (*Event-Driven Invalidation* con Tag Change Scripts):* Cuando un autómata PLC, sistema MES o proceso externo modifica las consignas en base de datos, la variación de un tag disparador (`[default]Config/ReloadCatalogs` o cambio de versión de receta) desencadena un *Gateway Tag Change Script* que purga al instante la entrada obsoleta de la caché sin requerir reinicios del sistema.
 
 
 ```mermaid
@@ -322,11 +324,15 @@ flowchart TD
 
 * Construir un módulo en `Project Library` (`project.util.cache`) que implemente un almacén de caché en memoria RAM con control de expiración por TTL e invalidación manual.
 * Diseñar un monitor interactivo en Perspective (`Views/Laboratorios/Lab8_2_CacheMonitor`) con scripts de 1 o 2 líneas para visualizar la aceleración de Cache Hit frente a Cache Miss.
+* Implementar la automatización desatendida en el Gateway:
+  * **Gateway Timer Script** para pre-calentamiento periódico en background (*Cache Warm-Up*).
+  * **Gateway Tag Change Script** para invalidación reactiva inmediata ante pulsos de tags disparadores de recarga de recetas.
 
 #### Resultado esperado
 
 * Módulo de caché validado ante accesos repetitivos y expiración.
 * Monitor en Perspective donde la primera consulta indica `CACHE MISS (SQL - ~20 ms)` y las siguientes `CACHE HIT (RAM - < 0.05 ms)`, con botón para invalidar manualmente la memoria.
+* Gateway autónomo donde un Timer Script mantiene la caché caliente cada 60 s y un Tag Change Script sobre `[default]Config/ReloadCatalogs` purga la memoria reactivamente ante cambios en planta.
 
 #### Paso a Paso para la Realización
 
@@ -387,6 +393,16 @@ def format_cache_stats_table(stats_dict):
 
 def get_source_badge_style(source_str):
     return "#27ae60" if "CACHE HIT" in str(source_str) else "#2980b9"
+
+# --- Funciones para Gateway Event Scripts (Timer y Tag Change) ---
+def warmup_catalog_cache(ttl_seconds=120):
+    return get_or_set("cat_setpoints", fetch_catalog_setpoints, ttl_seconds=ttl_seconds)
+
+def invalidate_on_tag_trigger(tag_path, reset_flag=True):
+    clear_cache("cat_setpoints")
+    system.util.getLogger("SCADA.Cache.TagChange").info("Cache invalidada desde tag: {}".format(tag_path))
+    if reset_flag:
+        system.tag.writeBlocking([tag_path], [False])
 ```
 
 **Paso 2: Validación en Script Console**
@@ -428,6 +444,34 @@ print "Llamada 2 (HIT): ", res2["source"], "| Tiempo:", res2["elapsed_ms"], "ms 
 
 **Paso 4: Verificación Interactiva**
 Lanzar en Preview (`Ctrl+P`): la primera pulsación muestra `CACHE MISS` (~20 ms); las pulsaciones siguientes muestran `CACHE HIT` (< 0.05 ms) incrementando los hits sin tocar PostgreSQL.
+
+**Paso 5: Automatización en Gateway Event Scripts (Timer Script y Tag Change Script)**
+
+1. **Gateway Timer Script (Pre-calentamiento / Warm-Up en Background):**
+   * En **Server Scripting -> Gateway Event Scripts -> Timer**, crear `Timer_Warmup_Setpoints`:
+     * **Delay:** `60000` ms (cada 60 segundos).
+     * **Threading:** `Dedicated` (evita bloquear el hilo compartido del Gateway).
+     * **Script (1 línea):**
+       ```python
+       # Pre-calienta la cache con TTL de 120s cada 60s (Zero Cache Miss para usuarios)
+       project.util.cache.warmup_catalog_cache(ttl_seconds=120)
+       ```
+
+2. **Gateway Tag Change Script (Invalidación Reactiva por Flanco de Tag):**
+   * Crear Memory Tag `[default]Config/ReloadCatalogs` (tipo `Boolean`, valor `false`).
+   * En **Server Scripting -> Gateway Event Scripts -> Tag Change**, crear `TagChange_Invalidate_Setpoints`:
+     * **Tag Paths:** `[default]Config/ReloadCatalogs`
+     * **Script (2 líneas):**
+       ```python
+       # Detecta flanco ascendente del tag y purga la memoria RAM reactivamente
+       if not initialChange and currentValue.value:
+           project.util.cache.invalidate_on_tag_trigger(event.tagPath.toString(), reset_flag=True)
+       ```
+
+3. **Verificación:**
+   * En Preview de Perspective, verificar que la consulta responde con `CACHE HIT` por el pre-calentamiento.
+   * Cambiar `[default]Config/ReloadCatalogs` a `true` en el Tag Browser: se resetea solo a `false` inmediatamente.
+   * Volver a consultar en la vista: el origen cambia limpiamente a `CACHE MISS` (recarga desde PostgreSQL) y la siguiente vuelve a ser `CACHE HIT`.
 
 ***
 
