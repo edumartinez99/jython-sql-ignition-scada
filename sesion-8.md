@@ -106,95 +106,124 @@ flowchart TD
 
 ***
 
-### 3. Laboratorio 8.1: Refactorización y Benchmark de Consultas SQL Lentas con Dashboard en Perspective
+### 3. Laboratorio 8.1: Optimización de Consultas SQL con Named Queries, Query Binding y Medición de Latencia en Perspective
 
 #### Objetivos
 
-* Analizar y medir el tiempo de respuesta de una consulta histórica no optimizada (con `SELECT *` y funciones en la cláusula `WHERE`) en la Script Console.
-* Refactorizar la consulta bajo criterios sargables con proyección explícita, implementando el motor de benchmarking en `Project Library` (`project.database.benchmark`) con medición de alta precisión en nanosegundos.
-* Construir una vista interactiva en Perspective (`Views/Laboratorios/Lab8_1_SQLBenchmark`) con banner KPI y tabla comparativa, aplicando scripts de 1 o 2 líneas.
+* Construir y contrastar dos _Named Queries_ en Ignition: una consulta histórica no optimizada (con `SELECT *` y función `EXTRACT` en el `WHERE`) frente a una consulta optimizada bajo estándares sargables con rango de fechas e índices B-Tree.
+* Alimentar el componente Table de Perspective mediante un **Query Binding nativo** hacia la Named Query optimizada, erradicando scripts innecesarios en la interfaz.
+* Implementar un selector de modo (*Legacy No Optimizada* vs *Optimizada Sargable*) y un **Label de telemetría de latencia** que mida en caliente el tiempo de ejecución en milisegundos (`ms`) mediante `System.nanoTime()`.
 
 #### Resultado esperado
 
-* Módulo de benchmarking validado en la Script Console y dashboard en Perspective donde se ejecuta la prueba en caliente, constatando visualmente más de un 70% de aceleración en la versión sargable.
+* Dos Named Queries operativas sobre `ins_Registre_Actuacions` en `DB_Admin`.
+* Vista en Perspective con una tabla que visualiza los registros y un Label interactivo que constata en tiempo real cómo la consulta sargable reduce la latencia en más de un 80% frente al escaneo completo de tabla (*Full Table Scan*).
 
 #### Paso a Paso para la Realización
 
-**Paso 1: Módulo en Project Library (`project.database.benchmark`)**
-En **Server Scripting -> Project Library**, crear `database.benchmark`:
+**Paso 1: Creación de las 2 Named Queries en Ignition Designer**
 
-```python
-"""Modulo: project.database.benchmark"""
-from java.lang import System
-
-def run_sql_benchmark(name, query_func, iterations=10):
-    query_func() # Warm-up
-    times_ms = []
-    rows = 0
-    for _ in range(iterations):
-        t0 = System.nanoTime()
-        ds = query_func()
-        t1 = System.nanoTime()
-        times_ms.append((t1 - t0) / 1000000.0)
-        rows = ds.getRowCount() if ds else 0
-    return {"name": name, "avg": round(sum(times_ms) / len(times_ms), 2), "min": round(min(times_ms), 2), "max": round(max(times_ms), 2), "rows": rows}
-
-def query_ineficiente_legacy():
-    return system.db.runQuery("SELECT * FROM REG_OPERADORS WHERE EXTRACT(YEAR FROM Data) = 2020", database="SANDBOX_DB")
-
-def query_optimizada_sargable():
-    return system.db.runQuery("SELECT id, Data, Operador, Accio FROM REG_OPERADORS WHERE Data >= '2020-01-01 00:00:00' AND Data < '2021-01-01 00:00:00'", database="SANDBOX_DB")
-
-def compare_query_performance(iterations=10):
-    iters = max(1, int(iterations)) if iterations else 10
-    leg = run_sql_benchmark("Legacy: SELECT * + EXTRACT(YEAR)", query_ineficiente_legacy, iters)
-    opt = run_sql_benchmark("Optimizada: Proyección + Rango Sargable", query_optimizada_sargable, iters)
-    imp = round(((leg["avg"] - opt["avg"]) / leg["avg"]) * 100.0, 1) if leg["avg"] > 0 else 0.0
-    return {"legacy": leg, "optimized": opt, "improvement_pct": imp, "iterations": iters}
-
-# --- Funciones auxiliares para scripts de 1 línea en Perspective ---
-def format_benchmark_table(res):
-    if not res or "legacy" not in res: return []
-    return [
-        {"tipo": res["legacy"]["name"], "media_ms": "{} ms".format(res["legacy"]["avg"]), "min_ms": "{} ms".format(res["legacy"]["min"]), "max_ms": "{} ms".format(res["legacy"]["max"]), "filas": res["legacy"]["rows"], "_style": {"backgroundColor": "#fdedec", "color": "#c0392b"}},
-        {"tipo": res["optimized"]["name"], "media_ms": "{} ms".format(res["optimized"]["avg"]), "min_ms": "{} ms".format(res["optimized"]["min"]), "max_ms": "{} ms".format(res["optimized"]["max"]), "filas": res["optimized"]["rows"], "_style": {"backgroundColor": "#eafaf1", "color": "#27ae60"}}
-    ]
-
-def get_improvement_badge(pct):
-    return "{}% Más Rápida (Optimización Exitosa)".format(float(pct or 0.0))
-```
-
-**Paso 2: Validación en Script Console**
-```python
-res = project.database.benchmark.compare_query_performance(15)
-print "Legacy:", res["legacy"]["avg"], "ms | Optimizada:", res["optimized"]["avg"], "ms | Mejora:", res["improvement_pct"], "%"
-print "Filas Table:", len(project.database.benchmark.format_benchmark_table(res))
-```
-
-**Paso 3: Dashboard en Perspective (`Views/Laboratorios/Lab8_1_SQLBenchmark`)**
-1. Crear la vista `Lab8_1_SQLBenchmark` (`Flex Container`, `column`) con propiedades `custom`:
-   * `custom.iterations`: `15`
-   * `custom.benchmarkResults`: `{}`
-2. **Banner KPI (Transforms de 1 línea):**
-   * Label Legacy: Binding a `view.custom.benchmarkResults.legacy.avg`.
-   * Label Optimizada: Binding a `view.custom.benchmarkResults.optimized.avg`.
-   * Badge Mejora: Binding a `view.custom.benchmarkResults.improvement_pct` con transform:
-     ```python
-     return project.database.benchmark.get_improvement_badge(value)
+1. En el **Project Browser**, navegar a **Server Scripting -> Named Queries**.
+2. Crear la carpeta `Actuacions` (clic derecho -> *New Folder...*).
+3. **Named Query 1: `Actuacions/Consulta_NoOptimizada`**
+   * **Database:** `DB_Admin`
+   * **Query Type:** *Query*
+   * **Parameters:** Añadir parámetro `targetYear` (Tipo: `Integer`, valor de prueba: `2026`).
+   * **SQL Query:**
+     ```sql
+     -- ANTI-PATRÓN: SELECT * y función EXTRACT en WHERE (Full Table Scan)
+     SELECT * 
+     FROM ins_Registre_Actuacions 
+     WHERE EXTRACT(YEAR FROM DataHora) = :targetYear
+     ORDER BY DataHora DESC
      ```
-3. **Botón y Tabla:**
-   * Botón Ejecutar (`btn_EjecutarBenchmark -> onActionPerformed` - 2 líneas):
-     ```python
-     iters = self.getSibling("num_Iteraciones").props.value
-     self.view.custom.benchmarkResults = project.database.benchmark.compare_query_performance(iterations=iters)
-     ```
-   * Tabla Resultados (`table_Benchmark.props.data` Transform - 1 línea):
-     ```python
-     return project.database.benchmark.format_benchmark_table(value)
+4. **Named Query 2: `Actuacions/Consulta_Optimizada`**
+   * **Database:** `DB_Admin`
+   * **Query Type:** *Query*
+   * **Parameters:**
+     * `startDate` (Tipo: `DateTime`, valor de prueba: `2026-01-01 00:00:00`)
+     * `endDate` (Tipo: `DateTime`, valor de prueba: `2027-01-01 00:00:00`)
+   * **SQL Query:**
+     ```sql
+     -- ESTÁNDAR SARGABLE: Proyección estricta + Rango temporal limpio sobre índice B-Tree
+     SELECT id, Equip, Descripcio, Usuari, DataHora 
+     FROM ins_Registre_Actuacions 
+     WHERE DataHora >= :startDate AND DataHora < :endDate
+     ORDER BY DataHora DESC
      ```
 
-**Paso 4: Verificación Interactiva**
-Lanzar en Preview (`Ctrl+P`), pulsar el botón y observar cómo la latencia pasa de ~18 ms a ~4 ms (más del 70% de reducción).
+**Paso 2: Comprobación en la pestaña Testing del Designer**
+1. En cada Named Query, abrir la pestaña **Testing**.
+2. Pulsar **Execute**.
+3. Observar el mensaje inferior del Designer: `Query executed in XX ms`, comprobando la diferencia de tiempos entre la versión con `EXTRACT` y la versión con rango sargable.
+
+**Paso 3: Creación de la Vista en Perspective (`Views/Laboratorios/Lab8_1_SQLBenchmark`)**
+1. En **Perspective -> Views**, crear la vista `Laboratorios/Lab8_1_SQLBenchmark` (`Flex Container`, `column`).
+2. Configurar las propiedades personalizadas en la vista (**custom**):
+   * `custom.queryMode`: `"OPTIMIZADA"` (string: `"NO_OPTIMIZADA"` o `"OPTIMIZADA"`)
+   * `custom.startDate`: `"2026-01-01 00:00:00"` (string o Date)
+   * `custom.endDate`: `"2027-01-01 00:00:00"` (string o Date)
+   * `custom.targetYear`: `2026` (integer)
+   * `custom.latencyLabel`: `"Selecciona un modo y pulsa 'Ejecutar Consulta'"` (string)
+
+**Paso 4: Configuración de la Tabla con Query Binding Nativo**
+1. Añadir el componente **Table** (`table_Actuaciones`).
+2. En la propiedad `props.data`, abrir la ventana de binding (**cadena**).
+3. Seleccionar **Query -> Named Query**:
+   * **Path:** `Actuacions/Consulta_Optimizada`
+   * **Parameters:**
+     * `startDate` $\rightarrow$ Binding a `view.custom.startDate`
+     * `endDate` $\rightarrow$ Binding a `view.custom.endDate`
+4. Pulsa **OK**. La tabla carga directamente los registros desde base de datos sin ejecutar una sola línea de script en el cliente.
+
+**Paso 5: Controles de Prueba y Medición de Latencia en el Label**
+1. Añadir un contenedor horizontal sobre la tabla con:
+   * **Dropdown / Radio Group (`drop_Modo`):**
+     * `props.options`:
+       ```json
+       [
+         {"value": "NO_OPTIMIZADA", "label": "Modo Legacy (SELECT * + EXTRACT)"},
+         {"value": "OPTIMIZADA", "label": "Modo Optimizado (Sargable + Índices)"}
+       ]
+       ```
+     * `props.value`: Binding bidireccional (**Bidirectional**) a `view.custom.queryMode`.
+   * **Botón Ejecutar (`btn_Ejecutar` -> `events -> onActionPerformed`):**
+     ```python
+     from java.lang import System
+
+     mode = self.view.custom.queryMode
+
+     if mode == "NO_OPTIMIZADA":
+         params = {"targetYear": self.view.custom.targetYear}
+         query_path = "Actuacions/Consulta_NoOptimizada"
+     else:
+         params = {"startDate": self.view.custom.startDate, "endDate": self.view.custom.endDate}
+         query_path = "Actuacions/Consulta_Optimizada"
+
+     # 1. Medir latencia de ejecucion con precision de nanosegundos en la JVM
+     t0 = System.nanoTime()
+     ds = system.db.runNamedQuery(query_path, params)
+     t1 = System.nanoTime()
+
+     elapsed_ms = round((t1 - t0) / 1000000.0, 2)
+     filas = ds.getRowCount() if ds is not None else 0
+
+     # 2. Actualizar datos de la tabla y telemetria en el Label
+     self.getSibling("table_Actuaciones").props.data = ds
+
+     if mode == "NO_OPTIMIZADA":
+         self.view.custom.latencyLabel = "⚠️ Legacy: {} ms (Full Table Scan | {} filas)".format(elapsed_ms, filas)
+     else:
+         self.view.custom.latencyLabel = "⚡ Optimizada: {} ms (Index Seek B-Tree | {} filas)".format(elapsed_ms, filas)
+     ```
+   * **Label de Latencia (`lbl_Latencia`):**
+     * `props.text`: Binding a `view.custom.latencyLabel`.
+     * `props.style`: Tamaño de fuente destacado (`16px`, negrita).
+
+**Paso 6: Verificación Interactiva**
+1. Abrir la vista en Preview (`Ctrl+P`).
+2. Seleccionar **Modo Legacy** y pulsar **Ejecutar Consulta**: el Label reporta la latencia elevada (~30-50 ms o superior) debido al escaneo completo de tabla.
+3. Conmutar a **Modo Optimizado** y pulsar **Ejecutar Consulta**: el Label reporta inmediatamente un tiempo drásticamente inferior (~2-4 ms), demostrando en vivo la eficacia de la indexación sargable sobre `ins_Registre_Actuacions`.
 
 ***
 
