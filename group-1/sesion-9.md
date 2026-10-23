@@ -623,7 +623,7 @@ Lanzar en Preview (`Ctrl+P`). Al probar con perfil `Operador Básico`, el sistem
 
 #### Objetivos
 
-* Analizar el script industrial monolítico heredado del cliente documentado en [ejemplos-scripts-ignition.md](file:///mnt/c/repos/jython-sql-ignition-scada/ejemplos-scripts-ignition.md#L494-L579) (sección *"Ejemplo de un script de evento enviar consignas"*), el cual ejecutaba lecturas y escrituras de tags individuales en bucle dentro de un botón de Perspective.
+* Analizar el script industrial monolítico heredado del cliente documentado (sección *"Ejemplo de un script de evento enviar consignas"*), el cual ejecutaba lecturas y escrituras de tags individuales en bucle dentro de un botón de Perspective.
 * Crear de forma automatizada mediante la **Script Console** la estructura de carpetas y tags del equipo industrial (`[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02`) utilizando `system.tag.configure`, inicializando las lecturas analógicas con valores aleatorios realistas (`random`) para emular la telemetría viva de planta.
 * Implementar un script de **simulación de variables de proceso en tiempo real** en la Script Console que actualice periódicamente los tags para observar su comportamiento en vivo en el Tag Browser del Designer.
 * Refactorizar el código separando la lógica en una función pura en `Project Library` (`project.consignas.service`) y orquestando el lote con operaciones atómicas seguras.
@@ -637,14 +637,13 @@ Lanzar en Preview (`Ctrl+P`). Al probar con perfil `Operador Básico`, el sistem
 
 #### Paso a Paso para la Realización
 
-**Paso 1: Diagnóstico del Código Heredado Monolítico ([ejemplos-scripts-ignition.md](file:///mnt/c/repos/jython-sql-ignition-scada/ejemplos-scripts-ignition.md#L494-L579))**
+**Paso 1: Diagnóstico del Código Heredado Monolítico**
 
-En el repositorio técnico del cliente ([ejemplos-scripts-ignition.md:L494-579](file:///mnt/c/repos/jython-sql-ignition-scada/ejemplos-scripts-ignition.md#L494-L579)), el botón "Enviar Consignas" contenía el siguiente script incrustado directamente en el evento `onActionPerformed`:
+En el repositorio técnico, el botón "Enviar Consignas" contenía el siguiente script incrustado directamente en el evento `onActionPerformed`:
 
 ```python
 # ==============================================================================
 # CODIGO HEREDADO ORIGINAL (Anti-patrón: 20 líneas en evento de botón Perspective)
-# Fuente: ejemplos-scripts-ignition.md (Sección "Ejemplo script evento enviar consignas")
 # ==============================================================================
 instances = self.getSibling("FlexRepeater").props.instances
 
@@ -1047,6 +1046,7 @@ print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, q
 
 * Cuestionario técnico individual de opción múltiple y resolución de casos de arquitectura asíncrona, seguridad y refactorización.
 * [Cuestionario Sesión 9](https://docs.google.com/forms/d/e/1FAIpQLScU9yrROAxZ94hG9aecbwbSOYK1ztsRjbAFq4Pxnr67oNqnfw/viewform?usp=header)
+* [Feedback Sesión 9](https://imagina-formacion.typeform.com/to/LQzhO2AR)
 
 
 #### Resultado esperado
