@@ -624,14 +624,14 @@ Lanzar en Preview (`Ctrl+P`). Al probar con perfil `Operador Básico`, el sistem
 #### Objetivos
 
 * Analizar el script industrial monolítico heredado del cliente documentado en [ejemplos-scripts-ignition.md](file:///mnt/c/repos/jython-sql-ignition-scada/ejemplos-scripts-ignition.md#L494-L579) (sección *"Ejemplo de un script de evento enviar consignas"*), el cual ejecutaba lecturas y escrituras de tags individuales en bucle dentro de un botón de Perspective.
-* Crear de forma automatizada mediante la **Script Console** la estructura de carpetas y tags del equipo industrial (`[default]EDAR/EDAR_BOMBA_01`) utilizando `system.tag.configure`.
+* Crear de forma automatizada mediante la **Script Console** la estructura de carpetas y tags del equipo industrial (`[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02`) utilizando `system.tag.configure`, inicializando las lecturas analógicas con valores aleatorios realistas (`random`) para emular la telemetría viva de planta.
 * Implementar un script de **simulación de variables de proceso en tiempo real** en la Script Console que actualice periódicamente los tags para observar su comportamiento en vivo en el Tag Browser del Designer.
 * Refactorizar el código separando la lógica en una función pura en `Project Library` (`project.consignas.service`) y orquestando el lote con operaciones atómicas seguras.
 * Rediseñar el script del botón en Perspective (`Views/Laboratorios/Lab9_3_ConsignasRefactored`), reduciendo las 20 líneas de anti-patrones originales a **2 líneas exactas** y seguras.
 
 #### Resultado esperado
 
-* Jerarquía de tags de la estación de bombeo creada y simulada en tiempo real desde la consola de scripts.
+* Jerarquía de tags de la estación de bombeo (`PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02`) creada con lecturas vivas simuladas y actualizada en tiempo real desde la consola de scripts.
 * Script heredado completamente transformado en un módulo limpio en `Project Library` (`project.consignas.service`), validado mediante la Script Console ante un vector de pruebas que certifica la equivalencia funcional.
 * Vista en Perspective con Flex Repeater donde el botón de envío masivo se ejecuta de forma atómica en una sola trama de red con registro unificado de auditoría.
 
@@ -676,7 +676,7 @@ for instance in instances:
 | :--- | :--- | :--- |
 | **1. Acoplamiento UI y Bloqueo** | Toda la lógica de negocio, E/S de tags y BD reside en el botón de la vista. | Si un tag o la base de datos tarda en responder, la sesión web del operador se congela. |
 | **2. Lecturas Síncronas en Bucle** | `readBlocking` ejecutado 2 veces por iteración (`ESIM` y `.Tooltip`). | Con 15 consignas se disparan 30 peticiones de red secuenciales innecesarias ($2 \times N$). |
-| **3. Reemplazo Inseguro de Nombres** | `tagPath.replace(tag, MName)` sustituye todas las ocurrencias del texto. | Si la ruta contiene `EDAR_SFOR/BOMBA/SFOR`, corrompe la carpeta dejando `EDAR_MFOS/BOMBA/MFOS`. |
+| **3. Reemplazo Inseguro de Nombres** | `tagPath.replace(tag, MName)` sustituye todas las ocurrencias del texto. | Si la ruta contiene `ETAP_SFOR/BOMBA/SFOR`, corrompe la carpeta dejando `ETAP_MFOS/BOMBA/MFOS`. |
 | **4. Escrituras No Atómicas** | `writeBlocking` individual por cada tag dentro del bucle for. | No hay atomicidad: si falla la escritura del 3er tag, los anteriores quedan modificados y el sistema en estado inconsistente. |
 | **5. Consultas SQL en Bucle** | `system.db.runNamedQuery` ejecutado dentro del bucle sin agrupación. | Agota el pool de conexiones JDBC del Gateway y multiplica la latencia por cada fila. |
 
@@ -684,21 +684,31 @@ for instance in instances:
 
 **Paso 2: Creación Automatizada de Tags en Script Console (`system.tag.configure`)**
 
-Para disponer del entorno completo en cualquier Ignition Gateway sin necesidad de configurar tags manualmente, abrir **Tools -> Script Console** y ejecutar el siguiente script para generar la jerarquía `[default]EDAR/EDAR_BOMBA_01`:
+Para disponer del entorno en una nueva ruta no utilizada en laboratorios anteriores (`[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02`), y simulando lecturas de instrumentación de campo reales mediante valores pseudo-aleatorios dinámicos (`random`), abrir **Tools -> Script Console** y ejecutar:
 
 ```python
 # ==============================================================================
-# SCRIPT CONSOLE: CREACIÓN AUTOMÁTICA DE LA ESTRUCTURA DE TAGS (LAB 9.3)
+# SCRIPT CONSOLE: CREACIÓN AUTOMÁTICA DE TAGS CON LECTURAS SIMULADAS (LAB 9.3)
 # ==============================================================================
+import random
+
 tag_provider = "[default]"
+folder_planta = "PLANTA_TRATAMIENTO"
+folder_equipo = "BOMBA_IMPULSION_02"
+
+# Simulación de lecturas vivas de instrumentación con valores pseudo-aleatorios realistas
+sim_flow = round(random.uniform(58.5, 74.0), 1)       # Caudal actual medido (m3/h)
+sim_max_flow = round(random.uniform(98.0, 112.5), 1)  # Consigna máxima de seguridad (m3/h)
+sim_sfor = 1.0 if random.choice([True, False]) else 0.0  # Estado de modo forzado
+sim_esim = True                                       # Enclavamiento / Simulación activo
 
 tags_structure = [
     {
-        "name": "EDAR",
+        "name": folder_planta,
         "tagType": "Folder",
         "tags": [
             {
-                "name": "EDAR_BOMBA_01",
+                "name": folder_equipo,
                 "tagType": "Folder",
                 "tags": [
                     # Enclavamiento / Modo Simulación
@@ -706,15 +716,15 @@ tags_structure = [
                         "name": "ESIM",
                         "tagType": "AtomicTag",
                         "valueType": "Boolean",
-                        "value": True,
-                        "tooltip": "Enclavamiento / Modo Simulación Bomba"
+                        "value": sim_esim,
+                        "tooltip": "Enclavamiento / Modo Simulación Activo"
                     },
-                    # Consigna 1: Caudal de Impulsión
+                    # Consigna 1: Caudal de Impulsión (valor inicial dinámico)
                     {
                         "name": "SCFL",
                         "tagType": "AtomicTag",
                         "valueType": "Float4",
-                        "value": 65.5,
+                        "value": sim_flow,
                         "tooltip": "Consigna Caudal Impulsion (m3/h)"
                     },
                     # Mando PLC 1: Caudal de Impulsión (Escritura destino)
@@ -725,12 +735,12 @@ tags_structure = [
                         "value": 0.0,
                         "tooltip": "Mando PLC Caudal Impulsion"
                     },
-                    # Consigna 2: Caudal Máximo de Seguridad
+                    # Consigna 2: Caudal Máximo de Seguridad (valor inicial dinámico)
                     {
                         "name": "SCMX",
                         "tagType": "AtomicTag",
                         "valueType": "Float4",
-                        "value": 105.0,
+                        "value": sim_max_flow,
                         "tooltip": "Caudal Maximo de Seguridad (m3/h)"
                     },
                     # Mando PLC 2: Caudal Máximo (Escritura destino)
@@ -741,12 +751,12 @@ tags_structure = [
                         "value": 0.0,
                         "tooltip": "Mando PLC Caudal Maximo"
                     },
-                    # Consigna 3: Modo Forzado
+                    # Consigna 3: Modo Forzado (estado dinámico inicial)
                     {
                         "name": "SFOR",
                         "tagType": "AtomicTag",
                         "valueType": "Float4",
-                        "value": 1.0,
+                        "value": sim_sfor,
                         "tooltip": "Consigna Modo Forzado de Bombeo"
                     },
                     # Mando PLC 3: Modo Forzado en Simulación (Escritura destino con ESIM=True)
@@ -765,13 +775,18 @@ tags_structure = [
 
 # collisionPolicy 'o' = Overwrite / Merge
 results = system.tag.configure(tag_provider, tags_structure, "o")
-print "=== CREACIÓN DE TAGS LABORATORIO 9.3 ==="
+print "=== CREACIÓN DE TAGS CON LECTURAS SIMULADAS (LAB 9.3) ==="
+print "Ruta base: [{}/{}]".format(folder_planta, folder_equipo)
+print "-> SCFL inicial : {} m3/h".format(sim_flow)
+print "-> SCMX inicial : {} m3/h".format(sim_max_flow)
+print "-> SFOR inicial : {}".format(sim_sfor)
+print "-> ESIM inicial : {}".format(sim_esim)
 for res in results:
     print "Resultado:", res.toString()
-print "-> Tags creados y operativos bajo [default]EDAR/EDAR_BOMBA_01"
+print "-> Tags creados y operativos con lecturas dinámicas en [default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02"
 ```
 
-> **Verificación:** Abrir el panel **Tag Browser** en el diseñador y comprobar que existe la carpeta `EDAR/EDAR_BOMBA_01` con sus 7 tags creados con calidad `Good`.
+> **Verificación:** Abrir el panel **Tag Browser** en el diseñador y comprobar que existe la carpeta `PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02` con sus 7 tags y valores generados por `random`.
 
 ---
 
@@ -787,7 +802,7 @@ import time
 import math
 import random
 
-base_path = "[default]EDAR/EDAR_BOMBA_01"
+base_path = "[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02"
 tags_to_update = [
     base_path + "/SCFL",
     base_path + "/SCMX",
@@ -800,8 +815,8 @@ print "Mantén visible el Tag Browser en Designer para ver parpadear los valores
 
 for cycle in range(1, 11):
     # Generar señal oscilante para caudal con ruido de proceso industrial
-    c_flow = round(65.0 + 8.5 * math.sin(cycle * 0.7) + random.uniform(-0.4, 0.4), 1)
-    c_max = round(105.0 + random.uniform(0.0, 3.0), 1)
+    c_flow = round(64.0 + 8.5 * math.sin(cycle * 0.7) + random.uniform(-0.5, 0.5), 1)
+    c_max = round(105.0 + random.uniform(0.0, 4.0), 1)
     c_sfor = 1.0 if (cycle % 2 == 0) else 0.0
     c_esim = True  # Enclavamiento de simulación habilitado
     
@@ -821,7 +836,7 @@ print "\n=== SIMULACIÓN EN TIEMPO REAL FINALIZADA CON ÉXITO ==="
 
 **Paso 4: Módulo Refactorizado en Project Library (`project.consignas.service`)**
 
-Crear el script en **Server Scripting -> Project Library** con la ruta `consignas.service`:
+Crear o actualizar el script en **Server Scripting -> Project Library** con la ruta `consignas.service`:
 
 ```python
 """
@@ -865,7 +880,7 @@ def process_and_send_consignas_batch(instances_data, base_path, equip_name, user
     
     Args:
         instances_data (list of dict): Lista de instancias del Flex Repeater con consignas y seleccion.
-        base_path (str): Ruta base de tags del equipo (ej. '[default]EDAR/EDAR_BOMBA_01').
+        base_path (str): Ruta base de tags del equipo (ej. '[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02').
         equip_name (str): Identificador del equipo para auditoria.
         username (str): Usuario responsable de la maniobra (self.session.props.auth.user.userName).
         
@@ -927,7 +942,7 @@ def process_and_send_consignas_batch(instances_data, base_path, equip_name, user
         return (False, {"msg": u"Fallo operativo: {}".format(str(ex)), "count": 0})
 
 
-def get_sample_consignas_instances(base_path="[default]EDAR/EDAR_BOMBA_01"):
+def get_sample_consignas_instances(base_path="[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02"):
     """
     Retorna la lista de instancias iniciales para alimentar el Flex Repeater de Perspective.
     
@@ -939,7 +954,7 @@ def get_sample_consignas_instances(base_path="[default]EDAR/EDAR_BOMBA_01"):
     """
     root = (base_path or "").rstrip("/")
     return [
-        {"selected": True,  "tagPath": "{}/SCFL".format(root), "value_new": 65.5, "label": "Caudal Consigna"},
+        {"selected": True,  "tagPath": "{}/SCFL".format(root), "value_new": 68.5, "label": "Caudal Consigna"},
         {"selected": True,  "tagPath": "{}/SCMX".format(root), "value_new": 105.0, "label": "Caudal Máximo"},
         {"selected": False, "tagPath": "{}/SFOR".format(root), "value_new": 0.0, "label": "Modo Forzado"}
     ]
@@ -961,17 +976,17 @@ assert project.consignas.service.resolve_target_tag_name("SFOR", False) == "MFOR
 print "1. Mapeo determinista de nombres: [ PASS ]"
 
 # 2. Test del servicio orquestador por lotes con tags reales
-instances = project.consignas.service.get_sample_consignas_instances("[default]EDAR/EDAR_BOMBA_01")
+instances = project.consignas.service.get_sample_consignas_instances("[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02")
 ok, summary = project.consignas.service.process_and_send_consignas_batch(
     instances_data=instances,
-    base_path="[default]EDAR/EDAR_BOMBA_01",
-    equip_name="EDAR_BOMBA_01",
+    base_path="[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02",
+    equip_name="BOMBA_IMPULSION_02",
     username="laura.vidal"
 )
 print "2. Servicio Batch: Exito = {} | Mensaje = {}".format(ok, summary["msg"])
 
 # 3. Comprobación de valores escritos en los mandos PLC
-check_paths = ["[default]EDAR/EDAR_BOMBA_01/MCFL", "[default]EDAR/EDAR_BOMBA_01/MCMX"]
+check_paths = ["[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02/MCFL", "[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02/MCMX"]
 qvs = system.tag.readBlocking(check_paths)
 print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, qvs[1].value)
 ```
@@ -981,7 +996,7 @@ print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, q
 === TEST DE NO REGRESIÓN: REFACTORIZACIÓN BATCH (LAB 9.3) ===
 1. Mapeo determinista de nombres: [ PASS ]
 2. Servicio Batch: Exito = True | Mensaje = Consignas enviadas y auditadas con éxito (2 actualizadas)
-3. Verificación de mandos: MCFL = 65.5 | MCMX = 105.0
+3. Verificación de mandos: MCFL = 68.5 | MCMX = 105.0
 ```
 
 ---
@@ -989,8 +1004,8 @@ print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, q
 **Paso 6: Vista Refactorizada en Perspective (`Views/Laboratorios/Lab9_3_ConsignasRefactored`)**
 
 1. Crear la vista `Laboratorios/Lab9_3_ConsignasRefactored` (`Flex Container`, `column`) con propiedades `custom`:
-   * `custom.basePath`: `"[default]EDAR/EDAR_BOMBA_01"` (string)
-   * `custom.equipName`: `"EDAR_BOMBA_01"` (string)
+   * `custom.basePath`: `"[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02"` (string)
+   * `custom.equipName`: `"BOMBA_IMPULSION_02"` (string)
    * `custom.feedbackMessage`: `"Listo para enviar"` (string)
 2. **Flex Repeater de Consignas (`rep_Consignas`):**
    * En `props.instances`, crear un **Script Transform (1 línea)**:
@@ -1013,7 +1028,7 @@ print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, q
 
 1. Activar el Modo Preview (`Ctrl+P`) o abrir la vista en el navegador.
 2. Modificar un valor en el repetidor, seleccionar las casillas y pulsar el botón.
-3. Observar la actualización instantánea del mensaje de confirmación y verificar en el Tag Browser que los tags `MCFL`, `MCMX` o `MFOS` reflejan los nuevos mandos inmediatamente.
+3. Observar la actualización instantánea del mensaje de confirmación y verificar en el Tag Browser que los tags `MCFL`, `MCMX` o `MFOS` reflejan los nuevos mandos inmediatamente en `[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02`.
 4. **Comparativa de Rendimiento SCADA:**
    * **Antes (Heredado monolítico):** $20$ operaciones de red síncronas bloqueantes $\rightarrow \approx 800\text{ ms}$ de latencia y congelamiento de UI.
    * **Ahora (Refactorizado con Batch):** $1$ lectura masiva $+ 1$ escritura atómica $\rightarrow < 40\text{ ms}$ de ejecución total sin degradación de la sesión.
