@@ -969,14 +969,14 @@ Ejecutar en la **Script Console** para validar la función pura y la orquestaci�
 print "=== TEST DE NO REGRESIÓN: REFACTORIZACIÓN BATCH (LAB 9.3) ==="
 
 # 1. Test unitario de función pura sin dependencias
-assert project.consignas.service.resolve_target_tag_name("SCFL", False) == "MCFL"
-assert project.consignas.service.resolve_target_tag_name("SFOR", True)  == "MFOS"
-assert project.consignas.service.resolve_target_tag_name("SFOR", False) == "MFOR"
+assert consignas.service.resolve_target_tag_name("SCFL", False) == "MCFL"
+assert consignas.service.resolve_target_tag_name("SFOR", True)  == "MFOS"
+assert consignas.service.resolve_target_tag_name("SFOR", False) == "MFOR"
 print "1. Mapeo determinista de nombres: [ PASS ]"
 
 # 2. Test del servicio orquestador por lotes con tags reales
-instances = project.consignas.service.get_sample_consignas_instances("[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02")
-ok, summary = project.consignas.service.process_and_send_consignas_batch(
+instances = consignas.service.get_sample_consignas_instances("[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02")
+ok, summary = consignas.service.process_and_send_consignas_batch(
     instances_data=instances,
     base_path="[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02",
     equip_name="BOMBA_IMPULSION_02",
@@ -1000,22 +1000,45 @@ print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, q
 
 ---
 
-**Paso 6: Vista Refactorizada en Perspective (`Views/Laboratorios/Lab9_3_ConsignasRefactored`)**
+**Paso 6: Construcción de la Plantilla de Fila y Vista en Perspective**
+
+El aviso **"View Not Specified - Configured view path is empty"** ocurre cuando un componente **Flex Repeater** tiene cargadas las instancias pero su propiedad `props.path` no tiene asignada la vista que debe repetir. Para resolverlo:
+
+##### 6.1. Creación de la Vista Plantilla de Fila (`Laboratorios/Plantillas/ConsignaRow`)
+
+1. En **Perspective -> Views**, crear una nueva vista con la ruta `Laboratorios/Plantillas/ConsignaRow`:
+   * **Root Container:** `Flex Container` (Direction: `row`, `alignItems: center`, `justifyContent: space-between`).
+   * Configurar tamaño sugerido: `height: 45px`, `width: 100%`.
+2. En la vista `ConsignaRow`, definir los parámetros en **PARAMS** (deben coincidir con las claves de cada instancia devuelta por `get_sample_consignas_instances`):
+   * `selected`: `true` (Boolean)
+   * `tagPath`: `"[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02/SCFL"` (String)
+   * `label`: `"Caudal Consigna"` (String)
+   * `value_new`: `68.5` (Float / Number)
+3. Añadir los componentes dentro del contenedor:
+   * **Checkbox (`chk_Select`):** Property Binding en `props.selected` hacia `view.params.selected` activando la casilla **Bidirectional** (imprescindible para que las selecciones del operador se propaguen de vuelta a la lista de instancias del repetidor).
+   * **Label (`lbl_Nombre`):** Property Binding en `props.text` hacia `view.params.label`.
+   * **Numeric Entry Field (`num_Valor`):** Property Binding en `props.value` hacia `view.params.value_new` activando la casilla **Bidirectional** (imprescindible para que el nuevo valor numérico editado se refleje en la instancia).
+
+---
+
+##### 6.2. Configuración de la Vista Principal (`Laboratorios/Lab9_3_ConsignasRefactored`)
 
 1. Crear la vista `Laboratorios/Lab9_3_ConsignasRefactored` (`Flex Container`, `column`) con propiedades `custom`:
    * `custom.basePath`: `"[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02"` (string)
    * `custom.equipName`: `"BOMBA_IMPULSION_02"` (string)
    * `custom.feedbackMessage`: `"Listo para enviar"` (string)
 2. **Flex Repeater de Consignas (`rep_Consignas`):**
-   * En `props.instances`, crear un **Script Transform (1 línea)**:
+   * En `PROPS -> path`: Seleccionar la vista plantilla creada: `"Laboratorios/Plantillas/ConsignaRow"` *(al asignarla desaparece el aviso "View Not Specified" y se dibujan las 3 filas)*.
+   * En `PROPS -> instances`, crear un **Script Transform (1 línea)**:
      ```python
-     return project.consignas.service.get_sample_consignas_instances(self.view.custom.basePath)
+     return consignas.service.get_sample_consignas_instances(self.view.custom.basePath)
      ```
 3. **Botón Enviar Consignas (`btn_EnviarConsignas`):**
    * `props.text`: `"ENVIAR CONSIGNAS SELECCIONADAS (BATCH)"`
+   * `style.backgroundColor`: `"#27ae60"`, `style.color`: `"#ffffff"`
    * En `events -> onActionPerformed`, añadir el **Script de 2 líneas exactas**:
      ```python
-     ok, summary = project.consignas.service.process_and_send_consignas_batch(self.getSibling("rep_Consignas").props.instances, self.view.custom.basePath, self.view.custom.equipName, self.session.props.auth.user.userName)
+     ok, summary = consignas.service.process_and_send_consignas_batch(self.getSibling("rep_Consignas").props.instances, self.view.custom.basePath, self.view.custom.equipName, self.session.props.auth.user.userName)
      self.view.custom.feedbackMessage = summary["msg"]
      ```
 4. **Label de Estado (`lbl_Resultado`):**
@@ -1028,9 +1051,6 @@ print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, q
 1. Activar el Modo Preview (`Ctrl+P`) o abrir la vista en el navegador.
 2. Modificar un valor en el repetidor, seleccionar las casillas y pulsar el botón.
 3. Observar la actualización instantánea del mensaje de confirmación y verificar en el Tag Browser que los tags `MCFL`, `MCMX` o `MFOS` reflejan los nuevos mandos inmediatamente en `[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02`.
-4. **Comparativa de Rendimiento SCADA:**
-   * **Antes (Heredado monolítico):** $20$ operaciones de red síncronas bloqueantes $\rightarrow \approx 800\text{ ms}$ de latencia y congelamiento de UI.
-   * **Ahora (Refactorizado con Batch):** $1$ lectura masiva $+ 1$ escritura atómica $\rightarrow < 40\text{ ms}$ de ejecución total sin degradación de la sesión.
 
 ***
 
