@@ -847,6 +847,7 @@ Descripcion: Version REFACTORIZADA del servicio de envio masivo de consignas (PD
              - Funciones auxiliares para scripts de Perspective de 1-2 lineas
 Autor: Equipo SCADA
 """
+from java.lang import Throwable
 
 def resolve_target_tag_name(source_tag_name, is_esim_active=False):
     """
@@ -887,10 +888,11 @@ def process_and_send_consignas_batch(instances_data, base_path, equip_name, user
         tuple: (bool success, dict execution_summary) con mensaje y total de tags actualizados.
     """
     logger = system.util.getLogger("SCADA.Consignas.BatchService")
-    if not instances_data or not isinstance(instances_data, list):
+    if not instances_data or len(instances_data) == 0:
         return (False, {"msg": u"No se han recibido instancias para procesar", "count": 0})
-        
-    selected_items = [inst for inst in instances_data if inst.get("selected", False) is True]
+            
+    # 2. Filtrado robusto (usar bool() en lugar de 'is True' para compatibilidad con Java Boolean)
+    selected_items = [inst for inst in instances_data if bool(inst.get("selected", False))]
     if len(selected_items) == 0:
         return (True, {"msg": u"No hay ninguna consigna seleccionada para enviar", "count": 0})
         
@@ -936,7 +938,7 @@ def process_and_send_consignas_batch(instances_data, base_path, equip_name, user
                 logger.warn("NamedQuery no disponible, registrando auditoria local: {} | Detalle: {}".format(desc, str(db_err)))
                 
         return (True, {"msg": u"Consignas enviadas y auditadas con éxito ({} actualizadas)".format(len(write_paths)), "count": len(write_paths)})
-    except Exception as ex:
+    except (Exception, Throwable) as ex:
         logger.error("Error en batch de consignas: {}".format(str(ex)))
         return (False, {"msg": u"Fallo operativo: {}".format(str(ex)), "count": 0})
 
@@ -1033,21 +1035,22 @@ print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, q
    * `custom.equipName`: `"BOMBA_IMPULSION_02"` (string)
    * `custom.feedbackMessage`: `"Listo para enviar"` (string)
 2. **Flex Repeater de Consignas (`rep_Consignas`):**
-   * En `PROPS -> path`: Seleccionar la vista plantilla creada: `"Laboratorios/Plantillas/ConsignaRow"` *(al asignarla desaparece el aviso "View Not Specified" y se dibujan las 3 filas)*.
-   * En `PROPS -> instances`, crear un **Script Transform (1 línea)**:
+   * **`props.direction`:** Cambiar de `"row"` a **`"column"`** *(imprescindible para que las 3 consignas se apilen verticalmente una debajo de otra en lugar de apretadas en una única fila horizontal)*.
+   * **`props.path`:** Seleccionar la plantilla creada: `"Laboratorios/Plantillas/ConsignaRow"`.
+   * En **`props.instances`**, crear un **Script Transform (1 línea)**:
      ```python
-     return consignas.service.get_sample_consignas_instances(self.view.custom.basePath)
+     return project.consignas.service.get_sample_consignas_instances(self.view.custom.basePath)
      ```
 3. **Botón Enviar Consignas (`btn_EnviarConsignas`):**
    * `props.text`: `"ENVIAR CONSIGNAS SELECCIONADAS (BATCH)"`
-   * `style.backgroundColor`: `"#27ae60"`, `style.color`: `"#ffffff"`
-   * En `events -> onActionPerformed`, añadir el **Script de 2 líneas exactas**:
+   * En `events -> onActionPerformed`, añadir la acción Script:
      ```python
-     ok, summary = consignas.service.process_and_send_consignas_batch(self.getSibling("rep_Consignas").props.instances, self.view.custom.basePath, self.view.custom.equipName, self.session.props.auth.user.userName)
+     user = self.session.props.auth.user.userName if (self.session.props.auth.authenticated and self.session.props.auth.user) else "operador_designer"
+     ok, summary = project.consignas.service.process_and_send_consignas_batch(self.getSibling("rep_Consignas").props.instances, self.view.custom.basePath, self.view.custom.equipName, user)
      self.view.custom.feedbackMessage = summary["msg"]
      ```
 4. **Label de Estado (`lbl_Resultado`):**
-   * Property Binding en `props.text` hacia `view.custom.feedbackMessage`.
+   * Configurar **Property Binding** en `props.text` apuntando a `view.custom.feedbackMessage` *(para que se actualice dinámicamente con el mensaje devuelto por el servicio)*.
 
 ---
 
