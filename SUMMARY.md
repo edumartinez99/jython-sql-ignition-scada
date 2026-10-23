@@ -16,9 +16,9 @@
 * [Mejoras Sesión 6](mejoras-6.md)
 * [Sesión 7](sesion-7.md)
 * [Sesión 8](sesion-8.md)
+* [Sesión 9](sesion-9.md)
 
 ## Group 1
 
-* [Sesión 9](group-1/sesion-9.md)
 * [Sesión 10](group-1/sesion-10.md)
 * [Sesión 11](group-1/sesion-11.md)
