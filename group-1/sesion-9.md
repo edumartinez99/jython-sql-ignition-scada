@@ -1005,17 +1005,24 @@ print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, q
 ##### 6.1. Creación de la Vista Plantilla de Fila (`Laboratorios/Plantillas/ConsignaRow`)
 
 1. En **Perspective -> Views**, crear una nueva vista con la ruta `Laboratorios/Plantillas/ConsignaRow`:
-   * **Root Container:** `Flex Container` (Direction: `row`, `alignItems: center`, `justifyContent: space-between`).
-   * Configurar tamaño sugerido: `height: 45px`, `width: 100%`.
-2. En la vista `ConsignaRow`, definir los parámetros en **PARAMS** (deben coincidir con las claves de cada instancia devuelta por `get_sample_consignas_instances`):
+   * **Root Container:** `Flex Container` (Direction: `row`, `alignItems: center`, `justifyContent: flex-start`, con espacio entre elementos).
+   * **Propiedades de tamaño de la vista:** `height: 45px`, `width: 100%`.
+2. En la vista `ConsignaRow`, definir los parámetros en **PARAMS** (deben coincidir exactamente con las claves de cada instancia generada):
    * `selected`: `true` (Boolean)
    * `tagPath`: `"[default]PLANTA_TRATAMIENTO/BOMBA_IMPULSION_02/SCFL"` (String)
    * `label`: `"Caudal Consigna"` (String)
    * `value_new`: `68.5` (Float / Number)
-3. Añadir los componentes dentro del contenedor:
-   * **Checkbox (`chk_Select`):** Property Binding en `props.selected` hacia `view.params.selected` activando la casilla **Bidirectional** (imprescindible para que las selecciones del operador se propaguen de vuelta a la lista de instancias del repetidor).
-   * **Label (`lbl_Nombre`):** Property Binding en `props.text` hacia `view.params.label`.
-   * **Numeric Entry Field (`num_Valor`):** Property Binding en `props.value` hacia `view.params.value_new` activando la casilla **Bidirectional** (imprescindible para que el nuevo valor numérico editado se refleje en la instancia).
+3. Añadir y configurar los componentes dentro de la fila (únicamente textos y enlaces de datos):
+
+| Componente | Nombre | Propiedad | Configuración / Binding |
+| :--- | :--- | :--- | :--- |
+| **Checkbox** | `chk_Select` | `props.text`<br>`props.selected` | **Texto:** `""` (vacío, borrar la palabra *"Checkbox"*)<br>**Binding Property:** `view.params.selected` (**Bidirectional**) |
+| **Label** | `lbl_Nombre` | `props.text` | **Binding Property:** `view.params.label` |
+| **Label (Tag)** | `lbl_TagCode` | `props.text` | **Binding Property:** `view.params.tagPath` con Script Transform:<br>`return value.split("/")[-1] if value else ""` |
+| **Numeric Entry** | `num_Valor` | `props.value` | **Binding Property:** `view.params.value_new` (**Bidirectional**) |
+| **Label** | `lbl_Unidad` | `props.text` | **Texto fijo:** `"m³/h"` |
+
+> **Nota sobre Bidirectional:** Tanto en el Checkbox (`props.selected`) como en el Numeric Entry Field (`props.value`), marcar la casilla **Bidirectional** en la ventana de Binding para que las modificaciones del operador se sincronicen con el Flex Repeater.
 
 ---
 
