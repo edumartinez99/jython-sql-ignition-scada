@@ -527,7 +527,7 @@ def warmup_catalog_cache(ttl_seconds=120):
     garantizando que ningun operador de planta experimente la latencia de un Cache Miss.
     """
     logger = system.util.getLogger("SCADA.Cache.Timer")
-    logger.debug("Ejecutando warm-up de catalogo de consignas en background...")
+    logger.info("Ejecutando warm-up de catalogo de consignas en background...")
     return get_or_set("cat_setpoints", fetch_catalog_setpoints, ttl_seconds=ttl_seconds)
 
 

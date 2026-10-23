@@ -255,7 +255,28 @@ flowchart LR
 **Paso 1: Módulo en Project Library (`project.integrations.energy`)**
 Crear el script `integrations.energy` con cliente HTTP, timeout estricto y funciones para UI:
 ```python
+"""
+Modulo: project.integrations.energy
+Descripcion: Cliente REST para integracion con APIs externas de tarifas energeticas
+             con control de timeouts, respuesta de contingencia (Fallback)
+             y funciones auxiliares de 1-2 lineas para Perspective.
+Autor: Equipo SCADA
+"""
+
+from java.lang import Throwable
+
 def get_current_energy_price(area_code="ES_PENINSULA", force_failure=False):
+    """
+    Consulta el precio horario de la energia en EUR/MWh desde una API REST externa.
+    Si la API no responde dentro del timeout (2000 ms), entrega una tarifa de fallback segura.
+    
+    Args:
+        area_code (str): Codigo de zona geografica ('ES_PENINSULA', 'ES_BALEARES', 'ES_CANARIAS').
+        force_failure (bool): Parametro de simulacion de fallo de red para pruebas de contingencia.
+        
+    Returns:
+        dict: {'price_eur_mwh': float, 'is_fallback': bool, 'source': str, 'timestamp': str}
+    """
     logger = system.util.getLogger("SCADA.Integrations.Energy")
     FALLBACK_TARIFF = {
         "price_eur_mwh": 85.50,
@@ -264,23 +285,48 @@ def get_current_energy_price(area_code="ES_PENINSULA", force_failure=False):
         "timestamp": system.date.format(system.date.now(), "dd/MM/yyyy HH:mm:ss")
     }
     client = system.net.httpClient(timeout=2000)
-    headers = {"Accept": "application/json", "User-Agent": "Ignition-SCADA-Gateway/8.1", "X-Plant-ID": "EDAR_CENTRAL_01"}
-    target_url = "https://api.energypricing.internal/v1/tariffs/current" if not force_failure else "https://10.255.255.1/timeout_test"
+    headers = {"Accept": "application/json", "User-Agent": "Ignition-SCADA-Gateway/8.1"}
+    # API pública real de tarificación eléctrica (PVPC / Mercado diario en EUR/MWh)
+    target_url = "https://tarifaelectrica.v2charge.com/v1/prices/now" if not force_failure else "https://10.255.255.1/timeout_test"
+    params = {"tariff": "2.0TD"}
     try:
-        response = client.get(target_url, params={"area": area_code}, headers=headers)
+        response = client.get(target_url, params=params, headers=headers)
         if response.statusCode == 200:
-            price_val = float(response.json.get("price", 85.50))
-            return {"price_eur_mwh": round(price_val, 2), "is_fallback": False, "source": "LIVE_REST_API", "timestamp": system.date.format(system.date.now(), "dd/MM/yyyy HH:mm:ss")}
+            payload = response.json
+            price_base = float(payload.get("pmd_eur_mwh", payload.get("price", 85.50)))
+            zone_multipliers = {"ES_PENINSULA": 1.0, "ES_BALEARES": 1.08, "ES_CANARIAS": 1.15}
+            price_final = price_base * zone_multipliers.get(area_code, 1.0)
+            return {"price_eur_mwh": round(price_final, 2), "is_fallback": False, "source": "LIVE_REST_API", "timestamp": system.date.format(system.date.now(), "dd/MM/yyyy HH:mm:ss")}
         logger.warn("API de energía devolvió HTTP {}. Aplicando fallback.".format(response.statusCode))
         return FALLBACK_TARIFF
-    except Exception as ex:
+    except (Exception, Throwable) as ex:
         logger.error("Error de conexión API energía: {}. Aplicando fallback.".format(str(ex)))
         return FALLBACK_TARIFF
 
 def fetch_energy_price_for_ui(area_code="ES_PENINSULA", force_failure=False):
+    """
+    Ejecuta la peticion REST y devuelve un diccionario normalizado listo para
+    asignar a las propiedades custom de la vista de Perspective.
+    
+    Args:
+        area_code (str): Codigo de zona geografica.
+        force_failure (bool): Booleano para forzar timeout de prueba.
+        
+    Returns:
+        dict: Estructura normalizada de datos de energia para Perspective.
+    """
     return get_current_energy_price(area_code=area_code, force_failure=force_failure)
 
 def get_energy_status_badge(is_fallback):
+    """
+    Retorna el texto y configuracion del badge de estado para el componente de UI.
+    
+    Args:
+        is_fallback (bool): Indica si la tarifa proviene del fallback de contingencia.
+        
+    Returns:
+        dict: Informacion de texto y color de contingencia para la interfaz.
+    """
     if is_fallback:
         return {"text": "TARIFA DE CONTINGENCIA (FALLBACK ACTIVO)", "backgroundColor": "#e67e22", "color": "#ffffff"}
     return {"text": "API REST EN VIVO (CONEXIÓN NOMINAL)", "backgroundColor": "#27ae60", "color": "#ffffff"}
@@ -288,10 +334,16 @@ def get_energy_status_badge(is_fallback):
 
 **Paso 2: Validación en Script Console**
 ```python
+# 1. Llamada Nominal (API Real en Vivo -> Verde)
+res = project.integrations.energy.fetch_energy_price_for_ui("ES_PENINSULA", force_failure=False)
+badge = project.integrations.energy.get_energy_status_badge(res["is_fallback"])
+print "Nominal -> Precio:", res["price_eur_mwh"], "EUR/MWh | Badge:", badge["text"], "(Color:", badge["backgroundColor"], ")"
+
+# 2. Llamada Simulando Caída de Red (Timeout 2s -> Naranja)
 res_fail = project.integrations.energy.fetch_energy_price_for_ui("ES_PENINSULA", force_failure=True)
-print "Precio:", res_fail["price_eur_mwh"], "EUR/MWh | Fallback:", res_fail["is_fallback"]
-badge = project.integrations.energy.get_energy_status_badge(res_fail["is_fallback"])
-print "Badge UI:", badge["text"], "(Color:", badge["backgroundColor"], ")"
+badge_fail = project.integrations.energy.get_energy_status_badge(res_fail["is_fallback"])
+print "Fallo   -> Precio:", res_fail["price_eur_mwh"], "EUR/MWh | Fallback:", res_fail["is_fallback"]
+print "Badge UI:", badge_fail["text"], "(Color:", badge_fail["backgroundColor"], ")"
 ```
 
 **Paso 3: Monitor en Perspective (`Views/Laboratorios/Lab9_1_EnergyPricing`)**
@@ -307,16 +359,20 @@ print "Badge UI:", badge["text"], "(Color:", badge["backgroundColor"], ")"
      ```
 3. **Tarjetas de Visualización:**
    * Precio (`kpi_Precio`): Binding a `view.custom.energyData.price_eur_mwh` con sufijo `" EUR / MWh"`.
-   * Badge Estado (`kpi_Badge`): Binding a `view.custom.energyData.is_fallback`.
-     * Transform en `props.text` (1 línea):
+   * Badge Estado (`kpi_Badge`):
+     * **Texto (`props.text`):** Binding a `view.custom.energyData.is_fallback` con Transform (1 línea):
        ```python
        return project.integrations.energy.get_energy_status_badge(value)["text"]
        ```
-     * Transform en `props.style.backgroundColor` (1 línea):
-       ```python
-       return project.integrations.energy.get_energy_status_badge(value)["backgroundColor"]
-       ```
-     * `props.style.color`: `"#ffffff"`.
+     * **Color de Fondo y Estilo (`props.style.classes` mediante Map + Styles):**
+       1. En el Project Browser, crear Style Classes en **Perspective -> Styles**:
+          * `Energy/LiveAPI`: `backgroundColor: #27ae60` (verde), `color: #ffffff`.
+          * `Energy/Fallback`: `backgroundColor: #e67e22` (naranja), `color: #ffffff`.
+       2. En `kpi_Badge.props.style.classes`, configurar un Binding directo a `view.custom.energyData.is_fallback` con un **Map Transform** nativo:
+          * `false` ➔ `Energy/LiveAPI`
+          * `true` ➔ `Energy/Fallback`
+          * `Fallback` ➔ `Energy/Fallback`
+       *(Evita invocar el intérprete de Python en el Gateway para estilos visuales, ejecutándose en el CSS nativo del cliente web).*
 
 **Paso 4: Verificación Interactiva**
 Lanzar en Preview (`Ctrl+P`). Activar el conmutador de simulación y pulsar el botón: tras 2 segundos de timeout estricto, la pantalla se desbloquea mostrando el precio de contingencia (85.50 EUR/MWh) y el badge en naranja sin haber bloqueado el hilo de ejecución web.
@@ -338,10 +394,54 @@ Lanzar en Preview (`Ctrl+P`). Activar el conmutador de simulación y pulsar el b
 
 #### Paso a Paso para la Realización
 
-**Paso 1: Módulo en Project Library (`project.security.core`)**
+**Paso 1: Configuración de Roles Nativos y Usuarios en Ignition Gateway**
+
+1. Abrir la consola web del Gateway de Ignition (`http://localhost:8088`).
+2. Navegar a **Config -> Security -> Users, Roles**.
+3. En el User Source activo (por defecto `default`), hacer clic en **Manage Roles**:
+   * Verificar que existan los roles nativos o crearlos con **Add Role**:
+     * `Operator` (operador básico de planta, permisos estándar de monitorización).
+     * `Supervisor` (supervisor de planta, autorizado para consignas y maniobras críticas).
+     * `Administrator` (administrador del sistema SCADA).
+4. En la pestaña **Users**, seleccionar **Add User** para crear los usuarios de prueba:
+   * **Usuario Operador:**
+     * *Username:* `operador_noche`
+     * *Password:* `Ignition123!`
+     * *Roles:* Asignar únicamente el rol **`Operator`**.
+   * **Usuario Supervisor:**
+     * *Username:* `laura.vidal`
+     * *Password:* `Ignition123!`
+     * *Roles:* Asignar los roles **`Operator`** y **`Supervisor`**.
+5. En el Designer, confirmar en **Project -> Project Properties -> Perspective -> General** que el **Identity Provider** apunte al User Source `default`, asegurando que `self.session.props.auth.user.roles` se pueble de forma nativa al autenticarse en Perspective.
+
+**Paso 2: Módulo en Project Library (`project.security.core`)**
 Crear el script `security.core` con validación de roles en servidor, auditoría y soporte UI:
 ```python
+"""
+Modulo: project.security.core
+Descripcion: Servicio de autorizacion RBAC (Role-Based Access Control) en backend,
+             auditoria de seguridad en Gateway y funciones auxiliares para Perspective.
+             Gestiona la verificacion contra los roles nativos del User Source de Ignition.
+Autor: Equipo SCADA
+"""
+
 def execute_authorized_action(user_roles, required_roles, action_name, equip, username, action_func, *args, **kwargs):
+    """
+    Valida en el servidor que los roles nativos del usuario contengan al menos uno de los roles
+    requeridos antes de invocar la funcion operativa de planta.
+    
+    Args:
+        user_roles (list of str): Lista de roles nativos del usuario (ej. self.session.props.auth.user.roles).
+        required_roles (list of str): Lista de roles nativos autorizados (ej. ['Supervisor', 'Administrator']).
+        action_name (str): Descripcion funcional de la accion para auditoria.
+        equip (str): Identificador del equipo (ej. 'EDAR_BOMBA_01').
+        username (str): Identificador del usuario autenticado (ej. self.session.props.auth.user.userName).
+        action_func (callable): Puntero a la funcion a ejecutar si la autorizacion es valida.
+        *args, **kwargs: Parametros a transferir a action_func.
+        
+    Returns:
+        tuple: (bool success, unicode message_or_result)
+    """
     logger = system.util.getLogger("SCADA.Security.RBAC")
     user_str = str(username) if username else "ANONYMOUS"
     roles_user_set = set(user_roles) if user_roles else set()
@@ -349,7 +449,7 @@ def execute_authorized_action(user_roles, required_roles, action_name, equip, us
     
     authorized = len(roles_user_set.intersection(roles_req_set)) > 0
     if not authorized:
-        logger.warn("INTENTO NO AUTORIZADO: Usuario '{}' (Roles: {}) intentó ejecutar [{}] en '{}'".format(user_str, list(roles_user_set), action_name, equip))
+        logger.warn("INTENTO NO AUTORIZADO: Usuario '{}' (Roles nativos: {}) intentó ejecutar [{}] en '{}'".format(user_str, list(roles_user_set), action_name, equip))
         try:
             sql = "INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari) VALUES (?, ?, ?)"
             system.db.runPrepUpdate(sql, [str(equip), u"SEGURIDAD: Intento no autorizado de ejecutar [{}]".format(unicode(action_name)), user_str], database="SANDBOX_DB")
@@ -367,13 +467,46 @@ def execute_authorized_action(user_roles, required_roles, action_name, equip, us
         return (False, u"Error interno durante la ejecución de la maniobra")
 
 def _maniobra_ajuste_velocidad(equip, new_speed):
+    """
+    Funcion interna de maniobra de planta sobre PLC tras autorizacion.
+    
+    Args:
+        equip (str): Tag o identificador del equipo.
+        new_speed (float): Nueva consigna de velocidad/caudal.
+        
+    Returns:
+        unicode: Mensaje de confirmacion operativa.
+    """
     return u"Velocidad de {} ajustada a {} m3/h con éxito".format(equip, new_speed)
 
 def execute_critical_setpoint_ui(user_roles, username, equip, new_speed):
+    """
+    Wrapper de 1 llamada para Perspective: valida permisos contra roles nativos de Ignition
+    y retorna mensaje de respuesta formateado y color de estado.
+    
+    Args:
+        user_roles (list of str): Roles nativos de la sesion (self.session.props.auth.user.roles).
+        username (str): Nombre de usuario autenticado en Ignition.
+        equip (str): Identificador del equipo objetivo.
+        new_speed (float): Valor de la nueva consigna.
+        
+    Returns:
+        dict: {'success': bool, 'message': unicode, 'color': str}
+    """
     ok, msg = execute_authorized_action(user_roles, ["Supervisor", "Administrator"], "AjusteCaudalCritico", equip, username, _maniobra_ajuste_velocidad, equip, new_speed)
     return {"success": ok, "message": msg, "color": "#27ae60" if ok else "#c0392b"}
 
 def get_security_audit_table(equip="EDAR_BOMBA_01", db_conn="SANDBOX_DB"):
+    """
+    Recupera las ultimas trazas de auditoria de seguridad formateadas para el componente Perspective Table.
+    
+    Args:
+        equip (str): Equipo a filtrar en el historico.
+        db_conn (str): Nombre de conexion JDBC configurada en el Gateway.
+        
+    Returns:
+        list of dict: Filas estructuradas con estilo condicional por tipo de evento.
+    """
     sql = "SELECT id, Equip, Descripcio, Usuari, DataHora FROM ins_Registre_Actuacions WHERE Equip = ? ORDER BY DataHora DESC LIMIT 10"
     pyds = system.dataset.toPyDataSet(system.db.runPrepQuery(sql, [equip], database=db_conn))
     rows = []
@@ -388,24 +521,26 @@ def get_security_audit_table(equip="EDAR_BOMBA_01", db_conn="SANDBOX_DB"):
     return rows
 ```
 
-**Paso 2: Validación en Script Console**
+**Paso 3: Validación en Script Console**
 ```python
+# Prueba con roles nativos de Ignition simulados
 res1 = project.security.core.execute_critical_setpoint_ui(["Operator"], "operador_noche", "EDAR_BOMBA_01", 80.0)
 print "Operador Basico:", res1["success"], "| Mensaje:", res1["message"]
 res2 = project.security.core.execute_critical_setpoint_ui(["Operator", "Supervisor"], "laura.vidal", "EDAR_BOMBA_01", 80.0)
 print "Supervisor:     ", res2["success"], "| Mensaje:", res2["message"]
 ```
 
-**Paso 3: Panel en Perspective (`Views/Laboratorios/Lab9_2_RBACMonitor`)**
+**Paso 4: Panel en Perspective (`Views/Laboratorios/Lab9_2_RBACMonitor`)**
 1. Crear la vista `Lab9_2_RBACMonitor` (`Flex Container`, `column`) con propiedades `custom`:
    * `custom.simulatedRoles`: `["Operator"]`
    * `custom.securityFeedback`: `{}`
 2. **Controles y Botón de Maniobra:**
-   * Dropdown (`drop_Roles`): Opciones `Operator` y `Supervisor`.
+   * Dropdown (`drop_Roles`): Opciones `Operator` y `Supervisor` (para pruebas en Designer).
    * Campo numérico (`num_Velocidad`): Valor inicial `85.0`.
    * Botón Ejecutar (`btn_EjecutarManiobra -> onActionPerformed` - 2 líneas):
      ```python
-     roles = [self.getSibling("drop_Roles").props.value]
+     # Lectura de roles nativos de la sesión de Ignition (con fallback al dropdown para pruebas)
+     roles = self.session.props.auth.user.roles if (self.session.props.auth.authenticated and len(self.session.props.auth.user.roles) > 0) else [self.getSibling("drop_Roles").props.value]
      self.view.custom.securityFeedback = project.security.core.execute_critical_setpoint_ui(roles, self.session.props.auth.user.userName, "EDAR_BOMBA_01", self.getSibling("num_Velocidad").props.value)
      ```
 3. **Feedback y Tabla de Auditoría:**
@@ -415,7 +550,7 @@ print "Supervisor:     ", res2["success"], "| Mensaje:", res2["message"]
      return project.security.core.get_security_audit_table("EDAR_BOMBA_01")
      ```
 
-**Paso 4: Verificación Interactiva**
+**Paso 5: Verificación Interactiva**
 Lanzar en Preview (`Ctrl+P`). Al probar con perfil `Operador Básico`, el sistema rechaza la orden con feedback en rojo y registra el intento no autorizado en la tabla. Al cambiar a `Supervisor de Planta`, la orden se aprueba en verde y queda auditada.
 
 ***
@@ -502,7 +637,30 @@ Lanzar en Preview (`Ctrl+P`). Al probar con perfil `Operador Básico`, el sistem
 **Paso 1: Módulo en Project Library (`project.consignas.service`)**
 Crear el script `consignas.service` con función pura de mapeo, orquestador por lotes y generador de datos:
 ```python
+"""
+Modulo: project.consignas.service
+Descripcion: Version REFACTORIZADA del servicio de envio masivo de consignas (PDF Pag. 9-10).
+             - Funcion pura desacoplada para transformacion de nombres de mando
+             - Lectura y escritura masiva de tags (Batch Operations)
+             - Persistencia y auditoria mediante Named Queries seguras
+             - Funciones auxiliares para scripts de Perspective de 1-2 lineas
+Autor: Equipo SCADA
+"""
+
 def resolve_target_tag_name(source_tag_name, is_esim_active=False):
+    """
+    Funcion Pura: Calcula el nombre del tag de mando PLC a partir de la consigna SCADA.
+    Aplica las reglas deterministicas de nomenclatura:
+    - 'SCFL' -> 'MCFL' (reemplazo de prefijo 'S' por 'M')
+    - 'SFOR' con ESIM activo -> 'MFOS' (caso especial condicionado por enclavamiento)
+    
+    Args:
+        source_tag_name (str): Nombre del tag de consigna de origen (ej. 'SCFL', 'SFOR').
+        is_esim_active (bool): Estado booleano del enclavamiento ESIM.
+        
+    Returns:
+        str: Nombre del tag de mando de destino en el PLC.
+    """
     if not source_tag_name:
         return ""
     tag_clean = source_tag_name.strip()
@@ -513,6 +671,19 @@ def resolve_target_tag_name(source_tag_name, is_esim_active=False):
     return "M_" + tag_clean
 
 def process_and_send_consignas_batch(instances_data, base_path, equip_name, username):
+    """
+    Orquesta el envio masivo de consignas seleccionadas en un Flex Repeater en 1 sola trama atomica.
+    Elimina lecturas y escrituras unitarias en bucle, ejecutando lecturas y escrituras por lote.
+    
+    Args:
+        instances_data (list of dict): Lista de instancias del Flex Repeater con consignas y seleccion.
+        base_path (str): Ruta base de tags del equipo (ej. '[default]EDAR/EDAR_BOMBA_01').
+        equip_name (str): Identificador del equipo para auditoria.
+        username (str): Usuario responsable de la maniobra (self.session.props.auth.user.userName).
+        
+    Returns:
+        tuple: (bool success, dict execution_summary) con mensaje y total de tags actualizados.
+    """
     logger = system.util.getLogger("SCADA.Consignas.BatchService")
     if not instances_data or not isinstance(instances_data, list):
         return (False, {"msg": u"No se han recibido instancias para procesar", "count": 0})
@@ -550,6 +721,15 @@ def process_and_send_consignas_batch(instances_data, base_path, equip_name, user
         return (False, {"msg": u"Fallo operativo: {}".format(str(ex)), "count": 0})
 
 def get_sample_consignas_instances(base_path="[default]EDAR/EDAR_BOMBA_01"):
+    """
+    Retorna la lista de instancias iniciales para alimentar el Flex Repeater de Perspective.
+    
+    Args:
+        base_path (str): Ruta base del equipo en el proveedor de tags.
+        
+    Returns:
+        list of dict: Modelos de instancia para el repetidor.
+    """
     root = (base_path or "").rstrip("/")
     return [
         {"selected": True,  "tagPath": "{}/SCFL".format(root), "value_new": 65.5, "label": "Caudal Consigna"},
