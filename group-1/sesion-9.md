@@ -1002,8 +1002,6 @@ print "3. Verificación de mandos: MCFL = {} | MCMX = {}".format(qvs[0].value, q
 
 **Paso 6: Construcción de la Plantilla de Fila y Vista en Perspective**
 
-El aviso **"View Not Specified - Configured view path is empty"** ocurre cuando un componente **Flex Repeater** tiene cargadas las instancias pero su propiedad `props.path` no tiene asignada la vista que debe repetir. Para resolverlo:
-
 ##### 6.1. Creación de la Vista Plantilla de Fila (`Laboratorios/Plantillas/ConsignaRow`)
 
 1. En **Perspective -> Views**, crear una nueva vista con la ruta `Laboratorios/Plantillas/ConsignaRow`:
