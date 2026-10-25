@@ -8,8 +8,8 @@ description: Testing Funcional, Estándares de Código y Lanzamiento del Proyect
 
 #### Objetivos
 
-* Consolidar los conceptos de procesamiento asíncrono (`system.util.invokeAsynchronous`), seguridad RBAC en backend y clientes REST con fallback resiliente.
-* Revisar la metodología de refactorización de código heredado (*Legacy*) aplicada en los laboratorios previos.
+* Consolidar los conceptos de procesamiento asíncrono, seguridad RBAC en backend y clientes REST con fallback resiliente.
+* Revisar la metodología de refactorización de código heredado (_Legacy_) aplicada en los laboratorios previos.
 
 #### Contenidos
 
@@ -46,28 +46,28 @@ description: Testing Funcional, Estándares de Código y Lanzamiento del Proyect
   * Jython carece de comprobación estática de tipos en tiempo de compilación. Los errores de sintaxis, discrepancias de tipo (`TypeError: unsupported operand type(s) for +: 'NoneType' and 'float'`) o accesos a propiedades inexistentes (`AttributeError`) **solo se manifiestan en tiempo de ejecución**.
   * Si un script no se somete a un banco de pruebas exhaustivo antes de publicarlo en el Gateway, un valor anómalo procedente de un PLC durante el turno de noche causará una excepción no controlada que abortará el proceso desatendido.
 * **La pirámide de pruebas adaptada a la arquitectura SCADA:**
-  * *Nivel 1 (Pruebas Unitarias de Lógica Pura):* Validación aislada de algoritmos de cálculo matemático (OEE, balances de masa, eficiencia térmica, escalado de señales y evaluación de enclavamientos lógicos) en la Script Console mediante datos simulados (*Mocks*).
-  * *Nivel 2 (Verificación de Contratos y Esquemas de Datos):* Comprobación de que las Named Queries devuelven las columnas y tipos de datos requeridos por las vistas y los servicios de orquestación.
-  * *Nivel 3 (Validación de Scope y Contexto):* Comprobación del script en su ámbito real de ejecución (Gateway vs. Session de Perspective) verificando la presencia de variables de entorno y permisos.
-  * *Nivel 4 (Pruebas de Integración Extremo a Extremo):* Verificación del flujo completo: lectura de tags OPC-UA, persistencia transaccional ACID en base de datos relacional, auditoría y actualización reactiva de la interfaz gráfica.
+  * _Nivel 1 (Pruebas Unitarias de Lógica Pura):_ Validación aislada de algoritmos de cálculo matemático (OEE, balances de masa, eficiencia térmica, escalado de señales y evaluación de enclavamientos lógicos) en la Script Console mediante datos simulados (_Mocks_).
+  * _Nivel 2 (Verificación de Contratos y Esquemas de Datos):_ Comprobación de que las Named Queries devuelven las columnas y tipos de datos requeridos por las vistas y los servicios de orquestación.
+  * _Nivel 3 (Validación de Scope y Contexto):_ Comprobación del script en su ámbito real de ejecución (Gateway vs. Session de Perspective) verificando la presencia de variables de entorno y permisos.
+  * _Nivel 4 (Pruebas de Integración Extremo a Extremo):_ Verificación del flujo completo: lectura de tags OPC-UA, persistencia transaccional ACID en base de datos relacional, auditoría y actualización reactiva de la interfaz gráfica.
 
 **2. Estrategia de Testing en 4 Cuadrantes: Casos Nominales, Límite, Nulos y Fallos Forzados**
 
 Para garantizar que un módulo sea apto para operar en producción 24/7, cada función debe validarse bajo la matriz de los cuatro cuadrantes de prueba:
 
-* **1. Casos Nominales (*Happy Path*):**
+* **1. Casos Nominales (**_**Happy Path**_**):**
   * Evaluación del comportamiento con entradas ideales y en rangos ordinarios de funcionamiento (ej. presiones dentro de consigna, lotes con scrap habitual del 1-2%, tiempos de ciclo esperados).
-* **2. Casos Límite (*Boundary Testing*):**
+* **2. Casos Límite (**_**Boundary Testing**_**):**
   * Verificación del comportamiento en las fronteras exactas de operación y discontinuidades matemáticas:
     * Producción cero o tiempo de ciclo cero: prevención de excepciones críticas de división por cero (`ZeroDivisionError`) en el cálculo de ratios de disponibilidad y rendimiento.
     * Valores frontera exactos (ej. nivel de depósito exactamente en el umbral mínimo del 15.0%, o temperatura de devanado en el límite térmico admisible de 85.0 °C).
-    * Desbordamiento de contadores de campo de 16 o 32 bits (*Rollover* de tags acumuladores de energía o caudal).
-* **3. Casos Nulos y Calidad Deficiente de Señales (*Null & Bad Quality*):**
+    * Desbordamiento de contadores de campo de 16 o 32 bits (_Rollover_ de tags acumuladores de energía o caudal).
+* **3. Casos Nulos y Calidad Deficiente de Señales (**_**Null & Bad Quality**_**):**
   * En entornos industriales, los enlaces de red de campo fallan, los cables de instrumentación se cortan y los servidores OPC-UA devuelven calidades `Bad_NotFound` o `Bad_CommunicationFailure`, traduciéndose en valores `None` en Jython.
-  * *El principio de diseño a prueba de fallos (Fail-Safe):* La función debe interceptar los valores nulos mediante cláusulas de guarda (*Guard Clauses*), rechazando maniobras de riesgo y retornando estados seguros sin propagar excepciones no controladas.
-* **4. Casos de Fallo Forzado (*Chaos & Fault Injection*):**
+  * _El principio de diseño a prueba de fallos (Fail-Safe):_ La función debe interceptar los valores nulos mediante cláusulas de guarda (_Guard Clauses_), rechazando maniobras de riesgo y retornando estados seguros sin propagar excepciones no controladas.
+* **4. Casos de Fallo Forzado (**_**Chaos & Fault Injection**_**):**
   * Simulación deliberada de fallos de infraestructura: corte de enlace con la base de datos SQL o timeout inducido en la comunicación con APIs externas.
-  * Verificación de que el sistema activa los mecanismos de contingencia (*Fallback*) y aborta transacciones sin dejar bloqueos (*Deadlocks*) ni registros huérfanos.
+  * Verificación de que el sistema activa los mecanismos de contingencia (_Fallback_) y aborta transacciones sin dejar bloqueos (_Deadlocks_) ni registros huérfanos.
 
 **3. Validación de Esquemas y Contratos de Datos en Named Queries**
 
@@ -75,25 +75,26 @@ Para garantizar que un módulo sea apto para operar en producción 24/7, cada fu
   * En proyectos industriales, los equipos de IT o administradores de bases de datos pueden renombrar una columna en una tabla (por ejemplo, renombrar `batch_id` a `id_lote`, o alterar el tipo de `INTEGER` a `VARCHAR`).
   * En Ignition, las Named Queries que alimentan tablas y gráficos en Perspective fallarán silenciosamente: los bindings quedarán vacíos o los scripts que accedan por nombre de clave (`row["batch_id"]`) arrojarán excepciones `KeyError`.
 * **Técnicas de verificación programática de contratos de datos:**
-  * Antes de vincular una Named Query a una lógica de producción, es una buena práctica auditar el `Dataset` devuelto mediante la Script Console:
-    ```python
-    ds = system.db.runNamedQuery("Production/GetShiftSummary", {"shiftId": 1})
-    expected_columns = ["machine_id", "total_batches", "sum_good", "sum_scrap"]
-    actual_columns = list(ds.getColumnNames())
-    missing = [col for col in expected_columns if col not in actual_columns]
-    if missing:
-        print "ALERTA QA: Esquema roto. Faltan columnas:", missing
-    ```
+  *   Antes de vincular una Named Query a una lógica de producción, es una buena práctica auditar el `Dataset` devuelto mediante la Script Console:
+
+      ```python
+      ds = system.db.runNamedQuery("Production/GetShiftSummary", {"shiftId": 1})
+      expected_columns = ["machine_id", "total_batches", "sum_good", "sum_scrap"]
+      actual_columns = list(ds.getColumnNames())
+      missing = [col for col in expected_columns if col not in actual_columns]
+      if missing:
+          print "ALERTA QA: Esquema roto. Faltan columnas:", missing
+      ```
   * Conversión segura de tipos Java/SQL a Jython: validación de objetos `java.sql.Timestamp`, `java.math.BigDecimal` y tratamientos defensivos de valores `NULL` procedentes del motor SQL.
 
 **4. Verificación en el Scope Correcto y Aislamiento de Dependencias**
 
 * **La matriz de Scopes en Ignition 8.1:**
   * Un script desarrollado en Ignition se ejecuta en contextos arquitectónicos con permisos y APIs radicalmente diferentes:
-    * *Designer Scope (Script Console):* Se ejecuta en la JVM local del diseñador del ingeniero. Permite depuración rápida con `print`.
-    * *Session Scope (Perspective):* Se ejecuta en el hilo web de la sesión del navegador. Tiene acceso a `self.session.props.auth`, pero no debe ejecutar I/O pesada síncrona.
-    * *Client Scope (Vision):* Se ejecuta en la estación de trabajo del operador en planta. Accede a `system.gui.*`.
-    * *Gateway Scope (Scheduled Scripts, Tag Change Scripts, WebDev, Timer):* Se ejecuta en el servidor central sin entorno gráfico. **No existe interfaz de usuario ni sesión web**.
+    * _Designer Scope (Script Console):_ Se ejecuta en la JVM local del diseñador del ingeniero. Permite depuración rápida con `print`.
+    * _Session Scope (Perspective):_ Se ejecuta en el hilo web de la sesión del navegador. Tiene acceso a `self.session.props.auth`, pero no debe ejecutar I/O pesada síncrona.
+    * _Client Scope (Vision):_ Se ejecuta en la estación de trabajo del operador en planta. Accede a `system.gui.*`.
+    * _Gateway Scope (Scheduled Scripts, Tag Change Scripts, WebDev, Timer):_ Se ejecuta en el servidor central sin entorno gráfico. **No existe interfaz de usuario ni sesión web**.
 * **Por qué fallan los scripts al pasar de Script Console a Gateway:**
   * Si un script programado en Gateway hace referencia a funciones de interfaz (`system.gui.*`) o asume variables de sesión (`self.session`), el planificador fallará de inmediato.
   * En Gateway Scope, las sentencias `print` son descartadas y no aparecen en la consola del Designer; el registro debe canalizarse obligatoriamente mediante `system.util.getLogger`.
@@ -105,14 +106,14 @@ Para garantizar que un módulo sea apto para operar en producción 24/7, cada fu
 
 Todo cambio en scripts de producción debe superar la siguiente lista de verificación técnica antes de guardarse en el Gateway:
 
-| # | Criterio de Auditoría | Verificación Obligatoria | Riesgo Mitigado |
-| :--- | :--- | :--- | :--- |
-| **1** | **Seguridad Defensiva** | 0 SQL concatenado (solo Named Queries con *Value Parameters* o Prepared Statements); validación RBAC obligatoria en servidor. | Inyección SQL y maniobras no autorizadas en planta. |
-| **2** | **Rendimiento de E/S** | 0 lecturas unitarias de tags en bucles (uso exclusivo de `system.tag.readBlocking` por lote); 0 consultas SQL en Script Transforms. | Sobrecarga de CPU en la JVM y latencias de ciclo en Gateway. |
-| **3** | **Captura Dual de Excepciones** | Interceptación explícita de `Exception` de Jython y `java.lang.Exception` / `Throwable` de Java. | Excepciones silenciosas que congelan hilos en segundo plano. |
-| **4** | **Logging Contextual** | Uso de `system.util.getLogger` identificando módulo, máquina y acción; erradicación total de `print`. | Ceguera operativa y dificultad de diagnóstico post-mortem. |
-| **5** | **Tolerancia a Nulos (Fail-Safe)** | Comprobación defensiva `if val is None` y verificación de calidad de tags antes de ejecutar cálculos físicos. | Excepciones `TypeError` en cascada ante desconexión de sensores. |
-| **6** | **No-Bloqueo de Interfaz (UI)** | Operaciones con latencia > 100 ms despachadas en segundo plano con `system.util.invokeAsynchronous`. | Congelamiento de vistas web de Perspective (*UI Freezing*). |
+| #     | Criterio de Auditoría              | Verificación Obligatoria                                                                                                            | Riesgo Mitigado                                                  |
+| ----- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **1** | **Seguridad Defensiva**            | 0 SQL concatenado (solo Named Queries con _Value Parameters_ o Prepared Statements); validación RBAC obligatoria en servidor.       | Inyección SQL y maniobras no autorizadas en planta.              |
+| **2** | **Rendimiento de E/S**             | 0 lecturas unitarias de tags en bucles (uso exclusivo de `system.tag.readBlocking` por lote); 0 consultas SQL en Script Transforms. | Sobrecarga de CPU en la JVM y latencias de ciclo en Gateway.     |
+| **3** | **Captura Dual de Excepciones**    | Interceptación explícita de `Exception` de Jython y `java.lang.Exception` / `Throwable` de Java.                                    | Excepciones silenciosas que congelan hilos en segundo plano.     |
+| **4** | **Logging Contextual**             | Uso de `system.util.getLogger` identificando módulo, máquina y acción; erradicación total de `print`.                               | Ceguera operativa y dificultad de diagnóstico post-mortem.       |
+| **5** | **Tolerancia a Nulos (Fail-Safe)** | Comprobación defensiva `if val is None` y verificación de calidad de tags antes de ejecutar cálculos físicos.                       | Excepciones `TypeError` en cascada ante desconexión de sensores. |
+| **6** | **No-Bloqueo de Interfaz (UI)**    | Operaciones con latencia > 100 ms despachadas en segundo plano con `system.util.invokeAsynchronous`.                                | Congelamiento de vistas web de Perspective (_UI Freezing_).      |
 
 ```mermaid
 flowchart TD
@@ -220,7 +221,7 @@ class SCADATestSuite(object):
 
 **Paso 3: Definición de la Función Crítica de Planta a Evaluar**
 
-Añadir a continuación en la consola la función que clasifica la calidad de un lote de fabricación y calcula el ratio de rechazo (*Scrap Rate*):
+Añadir a continuación en la consola la función que clasifica la calidad de un lote de fabricación y calcula el ratio de rechazo (_Scrap Rate_):
 
 ```python
 def evaluate_batch_quality_and_limits(total_units, scrap_units, max_scrap_allowed_pct=3.0):
@@ -351,8 +352,8 @@ Total Ejecutados: 6 | Superados: 6 | Fallidos: 0
 #### Objetivos
 
 * Asimilar las directrices de la guía de estilo PEP 8 adaptadas a las particularidades de Jython 2.7 y la arquitectura de Ignition SCADA.
-* Dominar la documentación formal de módulos y funciones mediante el estándar canónico de *docstrings*.
-* Establecer la matriz de patrones permitidos vs. prohibidos y el protocolo de revisión de código por pares (*Peer Review*) en equipos de ingeniería industrial.
+* Dominar la documentación formal de módulos y funciones mediante el estándar canónico de _docstrings_.
+* Establecer la matriz de patrones permitidos vs. prohibidos y el protocolo de revisión de código por pares (_Peer Review_) en equipos de ingeniería industrial.
 
 #### Contenidos
 
@@ -362,12 +363,12 @@ Total Ejecutados: 6 | Superados: 6 | Fallidos: 0
   * Una aplicación SCADA en una planta industrial opera durante 10, 15 o más de 20 años. A lo largo de su vida útil, decenas de ingenieros de control, técnicos de mantenimiento e integradores externos modifican los scripts.
   * Si el código es críptico, carece de convenciones o mezcla estilos personales, el mantenimiento se vuelve inviable y cada modificación introduce riesgo de parada.
 * **Reglas de nomenclatura unificada:**
-  * *Funciones y variables locales:* `snake_case` estricto con nombres semánticos que reflejen la magnitud física y el dominio (ej. `calculate_oee_metrics`, `target_speed_rpm`, `suction_pressure_bar`).
-  * *Constantes de módulo:* `UPPER_SNAKE_CASE` (ej. `MAX_PRESSURE_LIMIT = 10.5`, `DEFAULT_TIMEOUT_MS = 3000`).
-  * *Clases, UDTs y Tipos de Datos:* `PascalCase` (ej. `SCADATestSuite`, `MotorDriveUDT`, `PumpStation`).
-  * *Named Queries:* Jerarquía de carpetas por área funcional en `PascalCase` (ej. `Production/GetShiftSummary`, `Maintenance/InsertPumpAudit`).
-  * *Tags de Ignition:* Nomenclatura estandarizada con prefijo de área y equipo (ej. `[default]TRATAMIENTO/BOMBA_01/VELOCIDAD_ACTUAL`).
-  * *Prohibición terminante:* Variables crípticas de una sola letra (`x`, `a`, `tmp`, `data`, `res`, salvo contadores `i`, `j`), nombres de funciones basados en el autor (`script_eduardo`, `test_pepe`) o nombres ambiguos (`hacer_cosas()`, `proceso()`).
+  * _Funciones y variables locales:_ `snake_case` estricto con nombres semánticos que reflejen la magnitud física y el dominio (ej. `calculate_oee_metrics`, `target_speed_rpm`, `suction_pressure_bar`).
+  * _Constantes de módulo:_ `UPPER_SNAKE_CASE` (ej. `MAX_PRESSURE_LIMIT = 10.5`, `DEFAULT_TIMEOUT_MS = 3000`).
+  * _Clases, UDTs y Tipos de Datos:_ `PascalCase` (ej. `SCADATestSuite`, `MotorDriveUDT`, `PumpStation`).
+  * _Named Queries:_ Jerarquía de carpetas por área funcional en `PascalCase` (ej. `Production/GetShiftSummary`, `Maintenance/InsertPumpAudit`).
+  * _Tags de Ignition:_ Nomenclatura estandarizada con prefijo de área y equipo (ej. `[default]TRATAMIENTO/BOMBA_01/VELOCIDAD_ACTUAL`).
+  * _Prohibición terminante:_ Variables crípticas de una sola letra (`x`, `a`, `tmp`, `data`, `res`, salvo contadores `i`, `j`), nombres de funciones basados en el autor (`script_eduardo`, `test_pepe`) o nombres ambiguos (`hacer_cosas()`, `proceso()`).
 * **Indentación y formateo:**
   * Cuatro (4) espacios por nivel de indentación. **Prohibido terminantemente mezclar tabuladores y espacios** en Jython, ya que produce excepciones silenciosas `IndentationError` en tiempo de ejecución.
 
@@ -380,44 +381,45 @@ Total Ejecutados: 6 | Superados: 6 | Fallidos: 0
     3. Sección `Args:` con nombre del argumento, tipo de dato esperado y **unidad de ingeniería física** (°C, bar, m³/h, rpm, ms, kW).
     4. Sección `Returns:` con el tipo de dato y estructura detallada de retorno (tupla, diccionario con claves explícitas).
     5. Sección `Raises:` con las excepciones Java o Jython que la función puede propagar.
-* **Ejemplo canónico:**
-  ```python
-  def calculate_hydraulic_efficiency(flow_m3h, pressure_diff_bar, power_kw):
-      """
-      Calcula el rendimiento hidraulico instantaneo de un grupo de bombeo.
-      
-      Aplica la formula estandar: eta = (Q * DeltaP) / (36 * P_electrica).
-      
-      Args:
-          flow_m3h (float): Caudal volumetrico medido en m3/h.
-          pressure_diff_bar (float): Presion diferencial (salida - entrada) en bar.
-          power_kw (float): Potencia electrica activa absorbida en kW.
-          
-      Returns:
-          float: Rendimiento hidraulico en porcentaje (0.0 a 100.0).
-          
-      Raises:
-          ValueError: Si el caudal o la presion son negativos.
-      """
-  ```
+*   **Ejemplo canónico:**
+
+    ```python
+    def calculate_hydraulic_efficiency(flow_m3h, pressure_diff_bar, power_kw):
+        """
+        Calcula el rendimiento hidraulico instantaneo de un grupo de bombeo.
+        
+        Aplica la formula estandar: eta = (Q * DeltaP) / (36 * P_electrica).
+        
+        Args:
+            flow_m3h (float): Caudal volumetrico medido en m3/h.
+            pressure_diff_bar (float): Presion diferencial (salida - entrada) en bar.
+            power_kw (float): Potencia electrica activa absorbida en kW.
+            
+        Returns:
+            float: Rendimiento hidraulico en porcentaje (0.0 a 100.0).
+            
+        Raises:
+            ValueError: Si el caudal o la presion son negativos.
+        """
+    ```
 
 **3. Matriz de Patrones Permitidos vs. Prohibidos (Anti-patrones SCADA)**
 
-| Anti-patrón Prohibido | Riesgo en Planta | Patrón Permitido y Estándar |
-| :--- | :--- | :--- |
-| **SQL Concatenado** (`"SELECT * WHERE id = " + id`) | Inyección SQL y bloqueo de planes de ejecución en el motor relacional. | **Named Queries con *Value Parameters*** o `system.db.runPrepQuery` con parámetros posicionales `?`. |
-| **Lectura de Tags en bucle `for`** (`for t in tags: system.tag.readBlocking([t])`) | Múltiples viajes de red hacia el Gateway, disparando el uso de CPU. | **Lectura por lotes (*Batch*):** una única llamada `system.tag.readBlocking(lista_completa_tags)`. |
-| **Supresión silenciosa** (`except: pass`) | Ceguera absoluta ante fallos de hardware o red; depuración imposible. | **Captura dual tipada** (`Exception` + `Throwable`) con registro contextual en `system.util.getLogger`. |
-| **Lógica pesada en Script Transforms** (SQL o I/O en vistas Perspective) | Bloqueo del hilo de renderizado web; pantalla congelada (*UI Freezing*). | **Transforms puros de 1-2 líneas**; delegar cálculos a `Project Library` e I/O a eventos asíncronos. |
-| **Organización de scripts por programador** (`project.eduardo.test`) | Pérdida de código al rotar personal; duplicidad de funciones en planta. | **Organización por dominios funcionales:** `project.production.*`, `project.water_treatment.*`, `project.shared.*`. |
-| **Uso de `print` en Gateway Scripts** | Mensajes perdidos que no aparecen en la consola del Designer. | **Logging estructurado:** `system.util.getLogger("SCADA.Modulo")` con niveles `debug`, `info`, `warn`, `error`. |
+| Anti-patrón Prohibido                                                              | Riesgo en Planta                                                         | Patrón Permitido y Estándar                                                                                         |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| **SQL Concatenado** (`"SELECT * WHERE id = " + id`)                                | Inyección SQL y bloqueo de planes de ejecución en el motor relacional.   | **Named Queries con&#x20;**_**Value Parameters**_ o `system.db.runPrepQuery` con parámetros posicionales `?`.       |
+| **Lectura de Tags en bucle `for`** (`for t in tags: system.tag.readBlocking([t])`) | Múltiples viajes de red hacia el Gateway, disparando el uso de CPU.      | **Lectura por lotes (**_**Batch**_**):** una única llamada `system.tag.readBlocking(lista_completa_tags)`.          |
+| **Supresión silenciosa** (`except: pass`)                                          | Ceguera absoluta ante fallos de hardware o red; depuración imposible.    | **Captura dual tipada** (`Exception` + `Throwable`) con registro contextual en `system.util.getLogger`.             |
+| **Lógica pesada en Script Transforms** (SQL o I/O en vistas Perspective)           | Bloqueo del hilo de renderizado web; pantalla congelada (_UI Freezing_). | **Transforms puros de 1-2 líneas**; delegar cálculos a `Project Library` e I/O a eventos asíncronos.                |
+| **Organización de scripts por programador** (`project.eduardo.test`)               | Pérdida de código al rotar personal; duplicidad de funciones en planta.  | **Organización por dominios funcionales:** `project.production.*`, `project.water_treatment.*`, `project.shared.*`. |
+| **Uso de `print` en Gateway Scripts**                                              | Mensajes perdidos que no aparecen en la consola del Designer.            | **Logging estructurado:** `system.util.getLogger("SCADA.Modulo")` con niveles `debug`, `info`, `warn`, `error`.     |
 
-**4. Protocolo de Revisión por Pares (*Peer Code Review*) en Automatización**
+**4. Protocolo de Revisión por Pares (**_**Peer Code Review**_**) en Automatización**
 
 * **Procedimiento formal antes del guardado en producción:**
   1. El desarrollador ejecuta la suite de pruebas unitarias en la Script Console y valida que el 100% de las aserciones resulten en `[ PASS ]`.
   2. Un segundo ingeniero de control revisa el código contra la matriz de patrones permitidos y la checklist de 6 puntos de pre-despliegue.
-  3. Se verifica que no existen credenciales hardcodeadas, que las Named Queries emplean *Value Parameters* y que los docstrings incluyen unidades físicas.
+  3. Se verifica que no existen credenciales hardcodeadas, que las Named Queries emplean _Value Parameters_ y que los docstrings incluyen unidades físicas.
   4. Una vez aprobado, se realiza el guardado formal del proyecto en el Gateway (`Save Project`) y se documenta la versión en el registro de cambios.
 
 #### Resultado esperado
@@ -647,16 +649,16 @@ Para crear cualquier servicio nuevo en `Project Library` a partir de `project.te
    * Sustituir el cálculo genérico por el algoritmo de proceso específico (ej. validación física de límites de caudal, rampa de aceleración de variador de frecuencia o cálculo de potencia hidráulica).
    * Al no tener E/S (sin tags ni BD), estas funciones pueden auditarse al 100% en la Script Console con pruebas unitarias.
 3. **Implementar la Función Pública de Servicio (`set_pump_flow_setpoint`):**
-   * *Aduana de Seguridad RBAC:* Validar en el servidor que el usuario activo posee roles autorizados (`OPERADOR`, `MANTENIMIENTO` o `INGENIERIA`).
-   * *Validación Defensiva de Entradas:* Comprobar que el identificador del equipo existe y la consigna es numérica.
-   * *Lectura de Enclavamientos en Bloque:* Usar `system.tag.readBlocking` para verificar el estado físico del PLC (modo `REMOTO`, sin disparo térmico, sin seta de emergencia).
-   * *Escritura de Consigna Protegida:* Enviar el valor al PLC mediante `system.tag.writeBlocking`.
-   * *Pista de Auditoría:* Registrar la maniobra en la base de datos relacional (`ins_Registre_Actuacions`).
-   * *Retorno Estructurado:* Entregar la tupla `(bool success, dict payload_or_error)` hacia la interfaz de usuario.
+   * _Aduana de Seguridad RBAC:_ Validar en el servidor que el usuario activo posee roles autorizados (`OPERADOR`, `MANTENIMIENTO` o `INGENIERIA`).
+   * _Validación Defensiva de Entradas:_ Comprobar que el identificador del equipo existe y la consigna es numérica.
+   * _Lectura de Enclavamientos en Bloque:_ Usar `system.tag.readBlocking` para verificar el estado físico del PLC (modo `REMOTO`, sin disparo térmico, sin seta de emergencia).
+   * _Escritura de Consigna Protegida:_ Enviar el valor al PLC mediante `system.tag.writeBlocking`.
+   * _Pista de Auditoría:_ Registrar la maniobra en la base de datos relacional (`ins_Registre_Actuacions`).
+   * _Retorno Estructurado:_ Entregar la tupla `(bool success, dict payload_or_error)` hacia la interfaz de usuario.
 4. **Captura Dual de Excepciones y Logging:**
    * Interceptar `SQLException`, `JavaException` y `Exception`, traduciendo fallos técnicos en mensajes comprensibles y seguros para el operador sin exponer trazas internas.
 
----
+***
 
 #### 2. Código del Servicio Real Derivado: `project.equipment.pump_service`
 
@@ -821,7 +823,7 @@ def set_pump_flow_setpoint(pump_id, requested_flow_m3h, user_roles=None, executi
         return (False, {"error_code": "UNEXPECTED_ERROR", "user_message": u"Error interno en el servicio de bombeo."})
 ```
 
----
+***
 
 #### 3. Validación del Servicio Real desde la Script Console
 
@@ -866,7 +868,7 @@ print " - Error Code:   ", res3.get("error_code")
 print " - Mensaje UI:    ", res3.get("user_message")
 ```
 
----
+***
 
 #### 4. Consumo Desacoplado del Servicio desde Perspective UI
 
@@ -920,20 +922,20 @@ else:
 El proyecto integrador se articula a través de 6 capas estrictamente desacopladas que los alumnos construirán de extremo a extremo en la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md):
 
 * **Capa 1: Persistencia Relacional y Modelo de Datos (SQL DDL)**
-  * *Tabla maestra `plant_machines`:* Catálogo de equipos, líneas asignadas (`line_name`) y tiempo de ciclo ideal nominal en segundos (`ideal_cycle_time_sec`).
-  * *Tabla transaccional `production_batches`:* Control del ciclo de vida del lote (`batch_id`, `machine_id`, `shift_id`, `target_units`, `good_units`, `scrap_units`, `operating_time_min`, `status`).
-  * *Tabla de auditoría `ins_Registre_Actuacions`:* Registro de trazabilidad inmutable de todas las acciones operativas.
+  * _Tabla maestra `plant_machines`:_ Catálogo de equipos, líneas asignadas (`line_name`) y tiempo de ciclo ideal nominal en segundos (`ideal_cycle_time_sec`).
+  * _Tabla transaccional `production_batches`:_ Control del ciclo de vida del lote (`batch_id`, `machine_id`, `shift_id`, `target_units`, `good_units`, `scrap_units`, `operating_time_min`, `status`).
+  * _Tabla de auditoría `ins_Registre_Actuacions`:_ Registro de trazabilidad inmutable de todas las acciones operativas.
 * **Capa 2: Acceso a Datos Protegido (Named Queries Parametrizadas)**
-  * *`Production/GetShiftSummary`:* Consulta analítica que calcula totales producidos, unidades defectuosas y ratio de scrap por máquina y turno para un rango temporal indexado.
-  * *`Production/CloseBatchWithAudit`:* Consulta de modificación protegida mediante *Value Parameters* que cierra el lote y actualiza la pista de auditoría.
+  * _`Production/GetShiftSummary`:_ Consulta analítica que calcula totales producidos, unidades defectuosas y ratio de scrap por máquina y turno para un rango temporal indexado.
+  * _`Production/CloseBatchWithAudit`:_ Consulta de modificación protegida mediante _Value Parameters_ que cierra el lote y actualiza la pista de auditoría.
 * **Capa 3: Lógica de Negocio y Orquestación en `Project Library`**
-  * *Módulo de Cálculo Puro (`project.oee.calculations`):*
+  * _Módulo de Cálculo Puro (`project.oee.calculations`):_
     * `calculate_availability(operating_time_min, planned_time_min)`
     * `calculate_performance(total_units, operating_time_min, ideal_cycle_sec)`
     * `calculate_quality(good_units, total_units)`
     * `calculate_global_oee(availability_pct, performance_pct, quality_pct)`
     * Todas las funciones implementan validaciones defensivas contra nulos y división por cero.
-  * *Módulo de Servicio y Transaccionalidad (`project.production.batch_service`):*
+  * _Módulo de Servicio y Transaccionalidad (`project.production.batch_service`):_
     * `close_batch_transactional(batch_id, shift_id, user_roles, execution_context)`
     * Orquestación transaccional con control de roles (RBAC) en servidor, logging contextual estructurado y captura dual de excepciones.
 * **Capa 4: Presentación e Interfaz de Operador en Perspective**
@@ -942,7 +944,7 @@ El proyecto integrador se articula a través de 6 capas estrictamente desacoplad
     * Script Transforms ultra-ligeros (1-2 líneas) que delegan el cálculo a `project.oee.calculations`.
     * Message Handlers desacoplados para actualización fluida sin bloquear el hilo web del operador.
 * **Capa 5: Automatización Desatendida en Gateway (Quartz Scheduler)**
-  * *Gateway Scheduled Script (`ShiftEndConsolidation`):*
+  * _Gateway Scheduled Script (`ShiftEndConsolidation`):_
     * Disparo mediante expresión CRON determinista en los instantes de cambio de turno (`0 0 6,14,22 * * ?`).
     * **Diseño 100% Idempotente:** Claves de negocio unívocas y cláusulas de guarda que permiten reejecutar el script manualmente sin duplicar registros ni corromper balances.
 * **Capa 6: Aseguramiento de Calidad y Pruebas Funcionales (QA Suite)**
@@ -993,23 +995,23 @@ flowchart TD
 
 El proyecto final de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md) será evaluado de acuerdo con la siguiente matriz técnica objetiva:
 
-| Criterio de Evaluación | Peso | Requisitos Técnicos Exigidos |
-| :--- | :---: | :--- |
-| **1. Ciberseguridad y RBAC** | **20%** | Ausencia total de concatenación en SQL (0 vulnerabilidades SQLi); validación imperativa de roles (RBAC) en la capa de servicio de backend en servidor y no solo en botones visuales. |
+| Criterio de Evaluación                |   Peso  | Requisitos Técnicos Exigidos                                                                                                                                                                        |
+| ------------------------------------- | :-----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Ciberseguridad y RBAC**          | **20%** | Ausencia total de concatenación en SQL (0 vulnerabilidades SQLi); validación imperativa de roles (RBAC) en la capa de servicio de backend en servidor y no solo en botones visuales.                |
 | **2. Rendimiento y No-Bloqueo de UI** | **20%** | Cero lecturas unitarias de tags en bucles (agrupación en `system.tag.readBlocking`); Script Transforms livianos sin llamadas JDBC ni I/O pesada; actualización asíncrona mediante Message Handlers. |
-| **3. Arquitectura y Modularidad** | **20%** | Aislamiento estricto entre funciones puras de cálculo (`project.oee.calculations`) y funciones de servicio de orquestación; reutilización de la plantilla canónica desarrollada en la Sesión 10. |
-| **4. Robustez y Tolerancia a Fallos** | **15%** | Captura dual sistemática (`Exception` + `JavaException` / `Throwable`); manejo defensivo de valores `None` e inputs incoherentes; diseño estrictamente idempotente en tareas desatendidas. |
-| **5. Calidad de Código y Estándares** | **15%** | Cumplimiento de la guía de estilo PEP 8 adaptada a Jython; docstrings completos con unidades físicas en argumentos; nombres semánticos de variables y constantes en `UPPER_SNAKE_CASE`. |
-| **6. Testing Funcional (QA)** | **10%** | Batería de pruebas unitarias automatizada en la Script Console que valide casos nominales, casos límite (división por cero) y casos nulos con un 100% de aserciones aprobadas (`[ PASS ]`). |
+| **3. Arquitectura y Modularidad**     | **20%** | Aislamiento estricto entre funciones puras de cálculo (`project.oee.calculations`) y funciones de servicio de orquestación; reutilización de la plantilla canónica desarrollada en la Sesión 10.    |
+| **4. Robustez y Tolerancia a Fallos** | **15%** | Captura dual sistemática (`Exception` + `JavaException` / `Throwable`); manejo defensivo de valores `None` e inputs incoherentes; diseño estrictamente idempotente en tareas desatendidas.          |
+| **5. Calidad de Código y Estándares** | **15%** | Cumplimiento de la guía de estilo PEP 8 adaptada a Jython; docstrings completos con unidades físicas en argumentos; nombres semánticos de variables y constantes en `UPPER_SNAKE_CASE`.             |
+| **6. Testing Funcional (QA)**         | **10%** | Batería de pruebas unitarias automatizada en la Script Console que valide casos nominales, casos límite (división por cero) y casos nulos con un 100% de aserciones aprobadas (`[ PASS ]`).         |
 
 **4. Checklist de Preparación del Alumno para la Sesión 11**
 
 Antes de iniciar la jornada de trabajo de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md), cada participante debe comprobar:
 
-1. [x] Disponer de acceso operativo a **Ignition Designer** conectado a la base de datos `SANDBOX_DB`.
-2. [x] Tener probada y comprendida la clase `SCADATestSuite` implementada en el [Laboratorio 10.1](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-10.md#3-laboratorio-101-suite-de-testing-automatizado-en-script-console).
-3. [x] Disponer del módulo canónico `project.templates.service_template` implementado en el [Laboratorio 10.2](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-10.md#5-laboratorio-102-implementacion-de-plantilla-canonica-de-modulo-para-project-library) como base para la lógica de orquestación.
-4. [x] Haber revisado los fundamentos matemáticos de los factores del OEE (Disponibilidad, Rendimiento y Calidad).
+* [x] Disponer de acceso operativo a **Ignition Designer** conectado a la base de datos `SANDBOX_DB`.
+* [x] Tener probada y comprendida la clase `SCADATestSuite` implementada en el [Laboratorio 10.1](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-10.md#3-laboratorio-101-suite-de-testing-automatizado-en-script-console).
+* [x] Disponer del módulo canónico `project.templates.service_template` implementado en el [Laboratorio 10.2](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-10.md#5-laboratorio-102-implementacion-de-plantilla-canonica-de-modulo-para-project-library) como base para la lógica de orquestación.
+* [x] Haber revisado los fundamentos matemáticos de los factores del OEE (Disponibilidad, Rendimiento y Calidad).
 
 #### Resultado esperado
 
@@ -1028,15 +1030,15 @@ Antes de iniciar la jornada de trabajo de la [Sesión 11](file:///mnt/c/repos/jy
 #### Contenidos
 
 * **Pregunta 1: ¿Por qué en sistemas SCADA con Jython 2.7 es indispensable diseñar pruebas unitarias que evalúen entradas `None`?**
-  * *Respuesta técnica esperada:* Debido a que Jython es un lenguaje de tipado dinámico y en planta la instrumentación o los enlaces OPC-UA sufren caídas de comunicación devolviendo calidades malas o valores nulos. Si el script intenta operar matemáticamente con un `None` sin validación previa, lanzará un `TypeError` no controlado que detendrá la ejecución del proceso en caliente.
+  * _Respuesta técnica esperada:_ Debido a que Jython es un lenguaje de tipado dinámico y en planta la instrumentación o los enlaces OPC-UA sufren caídas de comunicación devolviendo calidades malas o valores nulos. Si el script intenta operar matemáticamente con un `None` sin validación previa, lanzará un `TypeError` no controlado que detendrá la ejecución del proceso en caliente.
 * **Pregunta 2: ¿Qué riesgo presenta ejecutar un script que funciona en la Script Console directamente como un Gateway Scheduled Script?**
-  * *Respuesta técnica esperada:* La Script Console se ejecuta en el Designer Scope local con contexto visual, mientras que Gateway Scope carece de interfaz de usuario, no dispone de variables de sesión (`session`), no soporta funciones gráficas (`system.gui.*`) y descarta las sentencias `print`. Si el script tiene acoplamientos con dichos elementos, fallará en producción.
+  * _Respuesta técnica esperada:_ La Script Console se ejecuta en el Designer Scope local con contexto visual, mientras que Gateway Scope carece de interfaz de usuario, no dispone de variables de sesión (`session`), no soporta funciones gráficas (`system.gui.*`) y descarta las sentencias `print`. Si el script tiene acoplamientos con dichos elementos, fallará en producción.
 * **Pregunta 3: En la guía de estilo PEP 8 para Ignition, ¿cuál es la convención para funciones, constantes y Named Queries?**
-  * *Respuesta técnica esperada:* Las funciones y variables locales deben usar `snake_case` (ej. `calculate_oee`), las constantes de módulo deben usar `UPPER_SNAKE_CASE` (ej. `DEFAULT_TIMEOUT_MS`) y las Named Queries y UDTs deben organizarse jerárquicamente en `PascalCase` (ej. `Production/GetShiftSummary`).
+  * _Respuesta técnica esperada:_ Las funciones y variables locales deben usar `snake_case` (ej. `calculate_oee`), las constantes de módulo deben usar `UPPER_SNAKE_CASE` (ej. `DEFAULT_TIMEOUT_MS`) y las Named Queries y UDTs deben organizarse jerárquicamente en `PascalCase` (ej. `Production/GetShiftSummary`).
 * **Pregunta 4: ¿Por qué el patrón `except: pass` está terminantemente prohibido en software de automatización industrial?**
-  * *Respuesta técnica esperada:* Porque silencia cualquier anomalía física o informática (errores de sintaxis, fallos de conexión SQL, desconexión de PLCs o violaciones de memoria), impidiendo el diagnóstico, ocultando situaciones de peligro en planta y dejando el sistema en un estado indeterminado.
+  * _Respuesta técnica esperada:_ Porque silencia cualquier anomalía física o informática (errores de sintaxis, fallos de conexión SQL, desconexión de PLCs o violaciones de memoria), impidiendo el diagnóstico, ocultando situaciones de peligro en planta y dejando el sistema en un estado indeterminado.
 * **Pregunta 5: ¿Cuáles son las 6 capas que integran la arquitectura del Proyecto Final Integrador de la Sesión 11?**
-  * *Respuesta técnica esperada:* Capa 1: Persistencia Relacional (SQL DDL), Capa 2: Acceso a Datos (Named Queries), Capa 3: Lógica de Negocio (`Project Library`: cálculos puros y orquestación), Capa 4: Presentación (Perspective UI), Capa 5: Automatización Desatendida (Gateway Scheduler CRON idempotente) y Capa 6: Calidad de Software (QA Test Runner en Script Console).
+  * _Respuesta técnica esperada:_ Capa 1: Persistencia Relacional (SQL DDL), Capa 2: Acceso a Datos (Named Queries), Capa 3: Lógica de Negocio (`Project Library`: cálculos puros y orquestación), Capa 4: Presentación (Perspective UI), Capa 5: Automatización Desatendida (Gateway Scheduler CRON idempotente) y Capa 6: Calidad de Software (QA Test Runner en Script Console).
 
 #### Resultado esperado
 
@@ -1056,7 +1058,7 @@ Antes de iniciar la jornada de trabajo de la [Sesión 11](file:///mnt/c/repos/jy
 
 * Rondas de revisión individual del código en la Script Console y en `Project Library`.
 * Validación del acceso a los esquemas de base de datos y recursos necesarios para el proyecto final.
-* Avance de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md): Desarrollo e integración asistida de las 6 capas, defensa técnica individual de proyectos (*Code Review* en vivo), test global de certificación y decálogo de consejos de ingeniería para entornos reales.
+* Avance de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md): Desarrollo e integración asistida de las 6 capas, defensa técnica individual de proyectos (_Code Review_ en vivo), test global de certificación y decálogo de consejos de ingeniería para entornos reales.
 
 #### Resultado esperado
 
