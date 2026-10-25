@@ -21,5 +21,4 @@
 
 ## Group 1
 
-* [Sesión 10](group-1/sesion-10.md)
 * [Sesión 11](group-1/sesion-11.md)
