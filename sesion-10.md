@@ -1080,7 +1080,6 @@ usr = self.session.props.auth.user.userName if self.session.props.auth.authentic
 ok, res = equipment.pump_service.set_pump_flow_setpoint("EDAR_BOMBA_01", sp, ["OPERADOR"], {"user": usr})
 
 self.getSibling("lbl_Feedback").props.text = u"Consigna OK: {} m³/h".format(res["applied_setpoint_m3h"]) if ok else res["user_message"]
-self.getSibling("lbl_Feedback").props.style.color = "#27ae60" if ok else "#e74c3c"
 ```
 
 ##### 4.4. Verificación Rápida en Modo Preview
