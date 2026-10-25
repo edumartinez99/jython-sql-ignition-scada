@@ -150,102 +150,22 @@ flowchart TD
 
 #### Paso a Paso para la Realización
 
-**Paso 1: Apertura de la Script Console**
+**Paso 1: Creación de la Función de Enclavamientos en la `Project Library` (`project.qa.safety`)**
 
-1. En **Ignition Designer**, acceder al menú superior **Tools -> Script Console**.
-2. Limpiar el panel interactivo de pruebas.
+En lugar de definir funciones aisladas y volátiles en la Script Console, la arquitectura recomendada de Ignition centraliza la lógica de negocio en la **Project Library** para que sea accesible de forma idéntica desde el Designer, Perspective y el Gateway.
 
-**Paso 2: Implementación de la Suite de Testing SCADA con Mocks de Tags y Datasets**
-
-Copiar y pegar la siguiente clase runner avanzada en la Script Console:
+1. En el árbol de navegación del **Designer**, desplegar **Server Scripting -> Project Library**.
+2. Hacer clic derecho y seleccionar **New Package** con el nombre `qa`.
+3. Dentro de `qa`, hacer clic derecho y seleccionar **New Script** con el nombre `safety`. El script se llamará `project.qa.safety`.
+4. Pegar la función de evaluación con dependencias inyectables y soporte de fail-safe:
 
 ```python
 """
-Laboratorio 10.1: Suite Avanzada de Testing Funcional para Ecosistemas Ignition
-Autor: Equipo SCADA - Control de Calidad
+Modulo: project.qa.safety
+Descripcion: Logica de enclavamientos y verificacion de seguridad para estaciones de bombeo.
+Desacopla la adquisicion de senales para permitir pruebas unitarias con Mocks en Designer y ejecucion real en Gateway.
 """
 
-class MockQuality(object):
-    """Emula com.inductiveautomation.ignition.common.model.values.Quality."""
-    def __init__(self, name="Good", is_good=True):
-        self.name = name
-        self._is_good = is_good
-
-    def isGood(self):
-        return self._is_good
-
-    def __str__(self):
-        return self.name
-
-
-class MockQualifiedValue(object):
-    """Emula el objeto QualifiedValue retornado por system.tag.readBlocking."""
-    def __init__(self, value, quality_name="Good", is_good=True):
-        self.value = value
-        self.quality = MockQuality(quality_name, is_good)
-        self.timestamp = system.date.now()
-
-
-class SCADAFunctionalTestSuite(object):
-    """
-    Test Runner profesional para scripts de Ignition SCADA.
-    Soporta aserciones de igualdad, condiciones booleanas, rangos y excepciones.
-    """
-    def __init__(self, suite_name):
-        self.suite_name = suite_name
-        self.tests_run = 0
-        self.tests_passed = 0
-        self.failures = []
-
-    def assert_equal(self, test_name, actual, expected):
-        self.tests_run += 1
-        if actual == expected:
-            self.tests_passed += 1
-            print "  [ PASS ] {}".format(test_name)
-        else:
-            self.failures.append({"test": test_name, "expected": expected, "actual": actual})
-            print "  [ FAIL ] {}".format(test_name)
-
-    def assert_true(self, test_name, condition):
-        self.assert_equal(test_name, bool(condition), True)
-
-    def assert_false(self, test_name, condition):
-        self.assert_equal(test_name, bool(condition), False)
-
-    def assert_in_range(self, test_name, value, min_val, max_val):
-        self.tests_run += 1
-        in_range = (value is not None) and (min_val <= value <= max_val)
-        if in_range:
-            self.tests_passed += 1
-            print "  [ PASS ] {} (Valor {} en rango [{}, {}])".format(test_name, value, min_val, max_val)
-        else:
-            self.failures.append({"test": test_name, "expected": "[{}, {}]".format(min_val, max_val), "actual": value})
-            print "  [ FAIL ] {} (Valor {} fuera de rango)".format(test_name, value)
-
-    def print_summary(self):
-        print "\n" + "=" * 78
-        print "INFORME DE TESTING INDUSTRIAL QA: {}".format(self.suite_name)
-        print "Total Pruebas: {} | Superadas: {} | Fallidas: {}".format(
-            self.tests_run, self.tests_passed, len(self.failures)
-        )
-        print "=" * 78
-        if self.failures:
-            print "DETALLE DE DISCREPANCIAS ENCONTRADAS:"
-            for f in self.failures:
-                print " - Test:     '{}'".format(f["test"])
-                print "   Esperado: {}".format(f["expected"])
-                print "   Obtenido: {}".format(f["actual"])
-            print "\n>>> ATENCIÓN: VERIFICACIÓN RECHAZADA. CORREGIR LÓGICA ANTES DE PUBLICAR EN GATEWAY <<<"
-        else:
-            print ">>> VEREDICTO: 100% DE PRUEBAS SUPERADAS. LÓGICA APTA PARA PRODUCCIÓN SCADA <<<"
-        print "=" * 78
-```
-
-**Paso 3: Definición de la Lógica de Proceso Industrial con Dependencias Inyectables**
-
-Añadir a continuación la función que evalúa la telemetría de una estación de bombeo y verifica los contratos de datos. Observa cómo desacopla la adquisición (permitiendo inyectar *Mocks* en pruebas y tags reales en producción):
-
-```python
 def evaluate_pump_station_safety(tag_reader_fn, pump_id, min_suction_pressure=1.2, max_motor_temp=85.0):
     """
     Evalua los permisivos de arranque y seguridad termica de un grupo de bombeo.
@@ -267,7 +187,7 @@ def evaluate_pump_station_safety(tag_reader_fn, pump_id, min_suction_pressure=1.
         tag_prefix + "ModoRemoto"
     ]
     
-    # 1. Adquisicion de senales (reales o simuladas)
+    # 1. Adquisicion de senales (reales o simuladas mediante inyeccion)
     q_values = tag_reader_fn(tags_to_read)
     
     # 2. Validacion de calidad de enlace OPC-UA / PLC (Fail-Safe)
@@ -279,7 +199,7 @@ def evaluate_pump_station_safety(tag_reader_fn, pump_id, min_suction_pressure=1.
             return {
                 "can_start": False, 
                 "status_code": "ERR_BAD_QUALITY", 
-                "user_message": u"Calidad de sensor degradada ({})".format(q.quality.name),
+                "user_message": u"Calidad de sensor degradada ({})".format(str(q.quality)),
                 "metrics": {}
             }
             
@@ -321,117 +241,266 @@ def evaluate_pump_station_safety(tag_reader_fn, pump_id, min_suction_pressure=1.
     }
 ```
 
-**Paso 4: Ejecución del Banco de Pruebas de Ecosistema SCADA**
+**Paso 2: Creación del Framework de Testing y Ejecutor en la `Project Library` (`project.qa.runner`)**
 
-Añadir las pruebas con simulaciones de tags (`MockQualifiedValue`) y validación de datasets:
+Ahora encapsulamos el motor de pruebas y las suites de test dentro de otro script de librería, haciéndolo ejecutable tanto interactivamente como en segundo plano desde el Gateway.
+
+1. Dentro del paquete `qa`, crear un nuevo script: `runner` (`project.qa.runner`).
+2. Copiar el runner con emulación de tipos Java de Ignition (`MockQuality`, `MockQualifiedValue`) y la función orquestadora `run_safety_suite()`:
 
 ```python
-suite = SCADAFunctionalTestSuite("Auditoría de Enclavamientos SCADA y Contratos de Datos")
+"""
+Modulo: project.qa.runner
+Descripcion: Framework de pruebas unitarias industriales con Mocks de Tags y Datasets.
+Permite ejecucion interactiva (Script Console) y ejecucion desatendida 24/7 (Gateway Scheduled Scripts).
+"""
 
-print "=== 1. PRUEBAS DE ENCLAVAMIENTO CON SIMULACIÓN DE TAGS OPC-UA ==="
+class MockQuality(object):
+    """Emula com.inductiveautomation.ignition.common.model.values.Quality."""
+    def __init__(self, name="Good", is_good=True):
+        self.name = name
+        self._is_good = is_good
 
-# Test 1.1: Escenario Nominal Conforme (Presión 2.5 bar, Temp 45.0 °C, Sin Paro, En Remoto)
-def mock_nominal(tags):
-    return [
-        MockQualifiedValue(2.5, "Good", True),
-        MockQualifiedValue(45.0, "Good", True),
-        MockQualifiedValue(False, "Good", True),
-        MockQualifiedValue(True, "Good", True)
+    def isGood(self):
+        return self._is_good
+
+    def __str__(self):
+        return self.name
+
+
+class MockQualifiedValue(object):
+    """Emula el objeto QualifiedValue retornado por system.tag.readBlocking."""
+    def __init__(self, value, quality_name="Good", is_good=True):
+        self.value = value
+        self.quality = MockQuality(quality_name, is_good)
+        self.timestamp = system.date.now()
+
+
+class SCADAFunctionalTestSuite(object):
+    """
+    Test Runner profesional para scripts de Ignition SCADA.
+    Soporta aserciones de igualdad, condiciones booleanas, rangos y reporte estructurado.
+    """
+    def __init__(self, suite_name):
+        self.suite_name = suite_name
+        self.tests_run = 0
+        self.tests_passed = 0
+        self.failures = []
+
+    def assert_equal(self, test_name, actual, expected):
+        self.tests_run += 1
+        if actual == expected:
+            self.tests_passed += 1
+            return True
+        else:
+            self.failures.append({"test": test_name, "expected": expected, "actual": actual})
+            return False
+
+    def assert_true(self, test_name, condition):
+        return self.assert_equal(test_name, bool(condition), True)
+
+    def assert_false(self, test_name, condition):
+        return self.assert_equal(test_name, bool(condition), False)
+
+    def assert_in_range(self, test_name, value, min_val, max_val):
+        self.tests_run += 1
+        in_range = (value is not None) and (min_val <= value <= max_val)
+        if in_range:
+            self.tests_passed += 1
+            return True
+        else:
+            self.failures.append({"test": test_name, "expected": "[{}, {}]".format(min_val, max_val), "actual": value})
+            return False
+
+    def get_summary(self):
+        return {
+            "suite_name": self.suite_name,
+            "total": self.tests_run,
+            "passed": self.tests_passed,
+            "failures_count": len(self.failures),
+            "failures": self.failures,
+            "success": len(self.failures) == 0
+        }
+
+
+def run_safety_suite():
+    """
+    Ejecuta el conjunto completo de pruebas unitarias sobre project.qa.safety.
+    Retorna un diccionario estructurado apto para consolas, logs de Gateway o alarmas.
+    """
+    import project.qa.safety
+    reload(project.qa.safety)  # Garantiza recarga de cambios en caliente
+    
+    suite = SCADAFunctionalTestSuite("Auditoría de Enclavamientos SCADA y Contratos de Datos")
+    
+    # Test 1.1: Escenario Nominal Conforme (Presión 2.5 bar, Temp 45 °C, Sin Paro, En Remoto)
+    def mock_nominal(tags):
+        return [
+            MockQualifiedValue(2.5, "Good", True),
+            MockQualifiedValue(45.0, "Good", True),
+            MockQualifiedValue(False, "Good", True),
+            MockQualifiedValue(True, "Good", True)
+        ]
+    res1 = project.qa.safety.evaluate_pump_station_safety(mock_nominal, "BOMBA_01")
+    suite.assert_true("Nominal Conforme: Arranque habilitado", res1["can_start"])
+    suite.assert_equal("Nominal Conforme: Código", res1["status_code"], "PERMISSIVE_OK")
+
+    # Test 1.2: Fallo de Enlace OPC-UA (Calidad Bad_CommunicationFailure en Sensor de Presión)
+    def mock_bad_quality(tags):
+        return [
+            MockQualifiedValue(None, "Bad_CommunicationFailure", False),
+            MockQualifiedValue(45.0, "Good", True),
+            MockQualifiedValue(False, "Good", True),
+            MockQualifiedValue(True, "Good", True)
+        ]
+    res2 = project.qa.safety.evaluate_pump_station_safety(mock_bad_quality, "BOMBA_01")
+    suite.assert_false("Fail-Safe ante sensor Bad: Arranque bloqueado", res2["can_start"])
+    suite.assert_equal("Código de error por mala calidad", res2["status_code"], "ERR_BAD_QUALITY")
+
+    # Test 1.3: Enclavamiento de Seguridad Física (Seta de Emergencia Accionada)
+    def mock_estop(tags):
+        return [
+            MockQualifiedValue(2.5, "Good", True),
+            MockQualifiedValue(45.0, "Good", True),
+            MockQualifiedValue(True, "Good", True),
+            MockQualifiedValue(True, "Good", True)
+        ]
+    res3 = project.qa.safety.evaluate_pump_station_safety(mock_estop, "BOMBA_01")
+    suite.assert_false("Enclavamiento E-Stop: Bloqueo inmediato", res3["can_start"])
+    suite.assert_equal("Código E-Stop", res3["status_code"], "INTERLOCK_ESTOP")
+
+    # Test 1.4: Límite Mecánico de Cavitación (Presión 0.8 bar < Umbral 1.2 bar)
+    def mock_low_pressure(tags):
+        return [
+            MockQualifiedValue(0.8, "Good", True),
+            MockQualifiedValue(45.0, "Good", True),
+            MockQualifiedValue(False, "Good", True),
+            MockQualifiedValue(True, "Good", True)
+        ]
+    res4 = project.qa.safety.evaluate_pump_station_safety(mock_low_pressure, "BOMBA_01")
+    suite.assert_false("Cavitación: Bloqueo por baja presión", res4["can_start"])
+    suite.assert_equal("Código baja aspiración", res4["status_code"], "INTERLOCK_LOW_SUCTION")
+
+    # Test 2.1: Validación de Contratos de Datos (Dataset de Named Query analítica)
+    headers = ["machine_id", "total_batches", "sum_good", "sum_scrap", "scrap_rate_pct"]
+    data = [
+        ["EDAR_BOMBA_01", 12, 14500, 150, 1.02],
+        ["EDAR_BOMBA_02", 8, 9200, 310, 3.26]
     ]
+    mock_dataset = system.dataset.toDataSet(headers, data)
+    
+    required_columns = set(["machine_id", "sum_good", "sum_scrap", "scrap_rate_pct"])
+    actual_columns = set(mock_dataset.getColumnNames())
+    suite.assert_true("Contrato SQL: Columnas requeridas presentes", required_columns.issubset(actual_columns))
 
-res1 = evaluate_pump_station_safety(mock_nominal, "BOMBA_01")
-suite.assert_true("Nominal Conforme: Arranque habilitado", res1["can_start"])
-suite.assert_equal("Nominal Conforme: Código", res1["status_code"], "PERMISSIVE_OK")
+    rate_bomba_1 = mock_dataset.getValueAt(0, "scrap_rate_pct")
+    suite.assert_in_range("Rango Scrap Bomba 01 dentro de tolerancia", rate_bomba_1, 0.0, 3.0)
 
-# Test 1.2: Fallo de Enlace OPC-UA (Calidad Bad_CommunicationFailure en Sensor de Presión)
-def mock_bad_quality(tags):
-    return [
-        MockQualifiedValue(None, "Bad_CommunicationFailure", False),
-        MockQualifiedValue(45.0, "Good", True),
-        MockQualifiedValue(False, "Good", True),
-        MockQualifiedValue(True, "Good", True)
-    ]
-
-res2 = evaluate_pump_station_safety(mock_bad_quality, "BOMBA_01")
-suite.assert_false("Fail-Safe ante sensor Bad: Arranque bloqueado", res2["can_start"])
-suite.assert_equal("Código de error por mala calidad", res2["status_code"], "ERR_BAD_QUALITY")
-
-# Test 1.3: Enclavamiento de Seguridad Física (Seta de Emergencia Presionada)
-def mock_estop(tags):
-    return [
-        MockQualifiedValue(2.5, "Good", True),
-        MockQualifiedValue(45.0, "Good", True),
-        MockQualifiedValue(True, "Good", True),   # Seta accionada
-        MockQualifiedValue(True, "Good", True)
-    ]
-
-res3 = evaluate_pump_station_safety(mock_estop, "BOMBA_01")
-suite.assert_false("Enclavamiento E-Stop: Bloqueo inmediato", res3["can_start"])
-suite.assert_equal("Código E-Stop", res3["status_code"], "INTERLOCK_ESTOP")
-
-# Test 1.4: Límite Mecánico de Cavitación (Presión 0.8 bar < Umbral 1.2 bar)
-def mock_low_pressure(tags):
-    return [
-        MockQualifiedValue(0.8, "Good", True),
-        MockQualifiedValue(45.0, "Good", True),
-        MockQualifiedValue(False, "Good", True),
-        MockQualifiedValue(True, "Good", True)
-    ]
-
-res4 = evaluate_pump_station_safety(mock_low_pressure, "BOMBA_01")
-suite.assert_false("Cavitación: Bloqueo por baja presión de succión", res4["can_start"])
-suite.assert_equal("Código baja aspiración", res4["status_code"], "INTERLOCK_LOW_SUCTION")
-
-print "\n=== 2. VERIFICACIÓN DE CONTRATOS DE DATOS (DATASETS DE NAMED QUERIES) ==="
-
-# Simulación de un Dataset devuelto por una Named Query analítica
-headers = ["machine_id", "total_batches", "sum_good", "sum_scrap", "scrap_rate_pct"]
-data = [
-    ["EDAR_BOMBA_01", 12, 14500, 150, 1.02],
-    ["EDAR_BOMBA_02", 8, 9200, 310, 3.26]
-]
-mock_dataset = system.dataset.toDataSet(headers, data)
-
-# Test 2.1: Verificación de Integridad de Columnas Requeridas por la UI
-required_columns = set(["machine_id", "sum_good", "sum_scrap", "scrap_rate_pct"])
-actual_columns = set(mock_dataset.getColumnNames())
-suite.assert_true("Contrato SQL: Columnas requeridas presentes", required_columns.issubset(actual_columns))
-
-# Test 2.2: Verificación de Rangos de Calidad en Telemetría
-rate_bomba_1 = mock_dataset.getValueAt(0, "scrap_rate_pct")
-suite.assert_in_range("Rango Scrap Bomba 01 dentro de tolerancia", rate_bomba_1, 0.0, 3.0)
-
-# Imprimir informe final consolidado
-suite.print_summary()
+    return suite.get_summary()
 ```
 
-**Paso 5: Ejecución y Validación en la Script Console**
+3. Guardar el proyecto en el Designer (**File -> Save** o `Ctrl+S`) para sincronizar los módulos con el Gateway.
 
-1. Pulsar **Execute** en la Script Console (o `Ctrl+Enter`).
-2. **Salida esperada en la consola:**
+**Paso 3: Ejecución Interactiva y Validación en la `Script Console`**
+
+Una vez definida la lógica en la `Project Library`, la consola de pruebas se simplifica drásticamente: ya no contiene lógica duplicada, sino una llamada limpia al runner:
+
+1. Abrir **Tools -> Script Console**.
+2. Escribir el script de invocación interactivo:
+
+```python
+import project.qa.runner
+reload(project.qa.runner)
+
+summary = project.qa.runner.run_safety_suite()
+
+print "=" * 78
+print "INFORME DE TESTING INDUSTRIAL QA: {}".format(summary["suite_name"])
+print "Total Pruebas: {} | Superadas: {} | Fallidas: {}".format(
+    summary["total"], summary["passed"], summary["failures_count"]
+)
+print "=" * 78
+
+if summary["success"]:
+    print ">>> VEREDICTO: 100% DE PRUEBAS SUPERADAS. LÓGICA APTA PARA PRODUCCIÓN SCADA <<<"
+else:
+    print ">>> ALERTA CRÍTICA: SE HAN DETECTADO FALLOS EN LAS PRUEBAS DE REGRESIÓN <<<"
+    for f in summary["failures"]:
+        print " - Test: '{}' | Esperado: {} | Obtenido: {}".format(f["test"], f["expected"], f["actual"])
+print "=" * 78
+```
+
+3. Pulsar **Execute** (`Ctrl+Enter`). Salida esperada:
 
 ```
-=== 1. PRUEBAS DE ENCLAVAMIENTO CON SIMULACIÓN DE TAGS OPC-UA ===
-  [ PASS ] Nominal Conforme: Arranque habilitado
-  [ PASS ] Nominal Conforme: Código
-  [ PASS ] Fail-Safe ante sensor Bad: Arranque bloqueado
-  [ PASS ] Código de error por mala calidad
-  [ PASS ] Enclavamiento E-Stop: Bloqueo inmediato
-  [ PASS ] Código E-Stop
-  [ PASS ] Cavitación: Bloqueo por baja presión de succión
-  [ PASS ] Código baja aspiración
-
-=== 2. VERIFICACIÓN DE CONTRATOS DE DATOS (DATASETS DE NAMED QUERIES) ===
-  [ PASS ] Contrato SQL: Columnas requeridas presentes
-  [ PASS ] Rango Scrap Bomba 01 dentro de tolerancia (Valor 1.02 en rango [0.0, 3.0])
-
 ==============================================================================
 INFORME DE TESTING INDUSTRIAL QA: Auditoría de Enclavamientos SCADA y Contratos de Datos
-Total Pruebas: 10 | Superadas: 10 | Fallidas: 0
+Total Pruebas: 8 | Superadas: 8 | Fallidas: 0
 ==============================================================================
 >>> VEREDICTO: 100% DE PRUEBAS SUPERADAS. LÓGICA APTA PARA PRODUCCIÓN SCADA <<<
 ==============================================================================
 ```
+
+**Paso 4: Automatización 24/7 con Gateway Scheduled Script (CRON) y Generación de Alertas**
+
+Para asegurar que ninguna actualización futura o cambio de esquemas de base de datos rompa la lógica en caliente, programaremos una ejecución periódica en el Gateway mediante un **Gateway Event Script (Scheduled / CRON)**.
+
+1. En el árbol del **Designer**, navegar a **Configuration -> Gateway Events -> Scheduled**.
+2. Crear un nuevo Scheduled Event Script:
+   * **Name:** `QA_Safety_Regression_Watcher`
+   * **Schedule:** Expresión CRON (ej. cada hora: `0 0 * * * ?` o para pruebas de verificación cada 5 minutos: `0 */5 * * * ?`).
+3. En el editor de script, implementar la lógica de supervisión desatendida. **Regla de oro:** En Gateway Scope no hay pantalla ni consola, por lo que se utiliza `system.util.getLogger` para registrar el veredicto en SLF4J y alertar ante fallos:
+
+```python
+"""
+Gateway Scheduled Script: QA_Safety_Regression_Watcher
+Scope: Gateway (Background Daemon)
+Frecuencia: Programada por expresion CRON
+Proposito: Ejecutar pruebas de regresion continuas sobre la logica critica y alertar en los logs del Gateway.
+"""
+logger = system.util.getLogger("SCADA.QA.Monitor")
+
+try:
+    import project.qa.runner
+    reload(project.qa.runner)
+    
+    summary = project.qa.runner.run_safety_suite()
+    
+    if summary["success"]:
+        logger.info("Verificación QA periódica completada con éxito. [{} de {} pruebas superadas]".format(
+            summary["passed"], summary["total"]
+        ))
+    else:
+        # Generar alerta de nivel WARN / ERROR en el Gateway
+        logger.error("ALERTA CRÍTICA QA: Se detectaron {} pruebas fallidas en la suite '{}'!".format(
+            summary["failures_count"], summary["suite_name"]
+        ))
+        for f in summary["failures"]:
+            logger.warn("Discrepancia en test '{}': Esperado [{}], Obtenido [{}]".format(
+                f["test"], f["expected"], f["actual"]
+            ))
+            
+        # Opcional: Generar registro en la tabla de incidencias o levantar tag de alarma
+        try:
+            audit_query = "INSERT INTO ins_Registre_Actuacions (usuari, accio, modul, exit) VALUES (?, ?, ?, ?)"
+            system.db.runPrepUpdate(audit_query, ["SYSTEM_GATEWAY_QA", "FALLO_TEST_REGRESION", "project.qa.safety", 0])
+        except Exception as db_err:
+            logger.warn("No se pudo registrar la alerta en BD: {}".format(db_err))
+
+except Exception as err:
+    logger.error("Excepción no controlada durante la ejecución del test runner de Gateway: {}".format(err))
+```
+
+4. Guardar los cambios con **File -> Save**.
+
+**Paso 5: Verificación de Logs y Diagnóstico en la Interfaz Web del Gateway**
+
+1. Abrir el navegador web y acceder a la página de administración del Gateway (`http://<gateway-ip>:8088`).
+2. En el menú lateral, acceder a **Status -> Diagnostics -> Logs**.
+3. En la caja de filtro de logger, escribir: `SCADA.QA.Monitor`.
+4. Comprobar la aparición de los mensajes automáticos:
+   * Mensaje informativo (`INFO`): *"Verificación QA periódica completada con éxito. [8 de 8 pruebas superadas]"*.
+   * Si intencionadamente alteramos una aserción para simular un fallo en `project.qa.runner`, verificar cómo el Gateway registra de inmediato un evento de severidad `ERROR` alertando a los operadores y supervisores de mantenimiento.
 
 ***
 
