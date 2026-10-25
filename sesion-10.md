@@ -141,7 +141,7 @@ flowchart TD
 
 #### Resultado esperado
 
-* Suite de pruebas funcional en la Script Console que valida una función crítica de proceso (`project.process.evaluate_safety_and_efficiency`) frente a lecturas de tags simuladas y contratos de Named Query, emitiendo un informe detallado con tiempos de ejecución, aserciones superadas y diagnósticos de calidad industrial.
+* Suite de pruebas funcional en la Script Console que valida una función crítica de proceso (`process.evaluate_safety_and_efficiency`) frente a lecturas de tags simuladas y contratos de Named Query, emitiendo un informe detallado con tiempos de ejecución, aserciones superadas y diagnósticos de calidad industrial.
 
 #### Conexión con el Entorno Real de Planta
 
@@ -150,18 +150,18 @@ flowchart TD
 
 #### Paso a Paso para la Realización
 
-**Paso 1: Creación de la Función de Enclavamientos en la `Project Library` (`project.qa.safety`)**
+**Paso 1: Creación de la Función de Enclavamientos en la `Project Library` (`qa.safety`)**
 
 En lugar de definir funciones aisladas y volátiles en la Script Console, la arquitectura recomendada de Ignition centraliza la lógica de negocio en la **Project Library** para que sea accesible de forma idéntica desde el Designer, Perspective y el Gateway.
 
 1. En el árbol de navegación del **Designer**, desplegar **Server Scripting -> Project Library**.
 2. Hacer clic derecho y seleccionar **New Package** con el nombre `qa`.
-3. Dentro de `qa`, hacer clic derecho y seleccionar **New Script** con el nombre `safety`. El script se llamará `project.qa.safety`.
+3. Dentro de `qa`, hacer clic derecho y seleccionar **New Script** con el nombre `safety`. El script se llamará `qa.safety`.
 4. Pegar la función de evaluación con dependencias inyectables y soporte de fail-safe:
 
 ```python
 """
-Modulo: project.qa.safety
+Modulo: qa.safety
 Descripcion: Logica de enclavamientos y verificacion de seguridad para estaciones de bombeo.
 Desacopla la adquisicion de senales para permitir pruebas unitarias con Mocks en Designer y ejecucion real en Gateway.
 """
@@ -179,7 +179,7 @@ def evaluate_pump_station_safety(tag_reader_fn, pump_id, min_suction_pressure=1.
     Returns:
         dict: {'can_start': bool, 'status_code': str, 'user_message': unicode, 'metrics': dict}
     """
-    tag_prefix = "[default]PLANTA_TRATAMIENTO/{}/".format(pump_id)
+    tag_prefix = "[default]EDAR/{}/".format(pump_id)
     tags_to_read = [
         tag_prefix + "PresionSuccion",
         tag_prefix + "TempMotor",
@@ -241,16 +241,16 @@ def evaluate_pump_station_safety(tag_reader_fn, pump_id, min_suction_pressure=1.
     }
 ```
 
-**Paso 2: Creación del Framework de Testing y Ejecutor en la `Project Library` (`project.qa.runner`)**
+**Paso 2: Creación del Framework de Testing y Ejecutor en la `Project Library` (`qa.runner`)**
 
 Ahora encapsulamos el motor de pruebas y las suites de test dentro de otro script de librería, haciéndolo ejecutable tanto interactivamente como en segundo plano desde el Gateway.
 
-1. Dentro del paquete `qa`, crear un nuevo script: `runner` (`project.qa.runner`).
+1. Dentro del paquete `qa`, crear un nuevo script: `runner` (`qa.runner`).
 2. Copiar el runner con emulación de tipos Java de Ignition (`MockQuality`, `MockQualifiedValue`) y la función orquestadora `run_safety_suite()`:
 
 ```python
 """
-Modulo: project.qa.runner
+Modulo: qa.runner
 Descripcion: Framework de pruebas unitarias industriales con Mocks de Tags y Datasets.
 Permite ejecucion interactiva (Script Console) y ejecucion desatendida 24/7 (Gateway Scheduled Scripts).
 """
@@ -325,11 +325,11 @@ class SCADAFunctionalTestSuite(object):
 
 def run_safety_suite():
     """
-    Ejecuta el conjunto completo de pruebas unitarias sobre project.qa.safety.
+    Ejecuta el conjunto completo de pruebas unitarias sobre qa.safety.
     Retorna un diccionario estructurado apto para consolas, logs de Gateway o alarmas.
     """
-    import project.qa.safety
-    reload(project.qa.safety)  # Garantiza recarga de cambios en caliente
+    import qa.safety
+    reload(qa.safety)  # Garantiza recarga de cambios en caliente
     
     suite = SCADAFunctionalTestSuite("Auditoría de Enclavamientos SCADA y Contratos de Datos")
     
@@ -341,7 +341,7 @@ def run_safety_suite():
             MockQualifiedValue(False, "Good", True),
             MockQualifiedValue(True, "Good", True)
         ]
-    res1 = project.qa.safety.evaluate_pump_station_safety(mock_nominal, "BOMBA_01")
+    res1 = qa.safety.evaluate_pump_station_safety(mock_nominal, "BOMBA_01")
     suite.assert_true("Nominal Conforme: Arranque habilitado", res1["can_start"])
     suite.assert_equal("Nominal Conforme: Código", res1["status_code"], "PERMISSIVE_OK")
 
@@ -353,7 +353,7 @@ def run_safety_suite():
             MockQualifiedValue(False, "Good", True),
             MockQualifiedValue(True, "Good", True)
         ]
-    res2 = project.qa.safety.evaluate_pump_station_safety(mock_bad_quality, "BOMBA_01")
+    res2 = qa.safety.evaluate_pump_station_safety(mock_bad_quality, "BOMBA_01")
     suite.assert_false("Fail-Safe ante sensor Bad: Arranque bloqueado", res2["can_start"])
     suite.assert_equal("Código de error por mala calidad", res2["status_code"], "ERR_BAD_QUALITY")
 
@@ -365,7 +365,7 @@ def run_safety_suite():
             MockQualifiedValue(True, "Good", True),
             MockQualifiedValue(True, "Good", True)
         ]
-    res3 = project.qa.safety.evaluate_pump_station_safety(mock_estop, "BOMBA_01")
+    res3 = qa.safety.evaluate_pump_station_safety(mock_estop, "BOMBA_01")
     suite.assert_false("Enclavamiento E-Stop: Bloqueo inmediato", res3["can_start"])
     suite.assert_equal("Código E-Stop", res3["status_code"], "INTERLOCK_ESTOP")
 
@@ -377,7 +377,7 @@ def run_safety_suite():
             MockQualifiedValue(False, "Good", True),
             MockQualifiedValue(True, "Good", True)
         ]
-    res4 = project.qa.safety.evaluate_pump_station_safety(mock_low_pressure, "BOMBA_01")
+    res4 = qa.safety.evaluate_pump_station_safety(mock_low_pressure, "BOMBA_01")
     suite.assert_false("Cavitación: Bloqueo por baja presión", res4["can_start"])
     suite.assert_equal("Código baja aspiración", res4["status_code"], "INTERLOCK_LOW_SUCTION")
 
@@ -409,10 +409,10 @@ Una vez definida la lógica en la `Project Library`, la consola de pruebas se si
 2. Escribir el script de invocación interactivo:
 
 ```python
-import project.qa.runner
-reload(project.qa.runner)
+import qa.runner
+reload(qa.runner)
 
-summary = project.qa.runner.run_safety_suite()
+summary = qa.runner.run_safety_suite()
 
 print "=" * 78
 print "INFORME DE TESTING INDUSTRIAL QA: {}".format(summary["suite_name"])
@@ -461,10 +461,10 @@ Proposito: Ejecutar pruebas de regresion continuas sobre la logica critica y ale
 logger = system.util.getLogger("SCADA.QA.Monitor")
 
 try:
-    import project.qa.runner
-    reload(project.qa.runner)
+    import qa.runner
+    reload(qa.runner)
     
-    summary = project.qa.runner.run_safety_suite()
+    summary = qa.runner.run_safety_suite()
     
     if summary["success"]:
         logger.info("Verificación QA periódica completada con éxito. [{} de {} pruebas superadas]".format(
@@ -483,7 +483,7 @@ try:
         # Opcional: Generar registro en la tabla de incidencias o levantar tag de alarma
         try:
             audit_query = "INSERT INTO ins_Registre_Actuacions (usuari, accio, modul, exit) VALUES (?, ?, ?, ?)"
-            system.db.runPrepUpdate(audit_query, ["SYSTEM_GATEWAY_QA", "FALLO_TEST_REGRESION", "project.qa.safety", 0])
+            system.db.runPrepUpdate(audit_query, ["SYSTEM_GATEWAY_QA", "FALLO_TEST_REGRESION", "qa.safety", 0])
         except Exception as db_err:
             logger.warn("No se pudo registrar la alerta en BD: {}".format(db_err))
 
@@ -500,7 +500,7 @@ except Exception as err:
 3. En la caja de filtro de logger, escribir: `SCADA.QA.Monitor`.
 4. Comprobar la aparición de los mensajes automáticos:
    * Mensaje informativo (`INFO`): *"Verificación QA periódica completada con éxito. [8 de 8 pruebas superadas]"*.
-   * Si intencionadamente alteramos una aserción para simular un fallo en `project.qa.runner`, verificar cómo el Gateway registra de inmediato un evento de severidad `ERROR` alertando a los operadores y supervisores de mantenimiento.
+   * Si intencionadamente alteramos una aserción para simular un fallo en `qa.runner`, verificar cómo el Gateway registra de inmediato un evento de severidad `ERROR` alertando a los operadores y supervisores de mantenimiento.
 
 ***
 
@@ -568,7 +568,7 @@ except Exception as err:
 | **Lectura de Tags en bucle `for`** (`for t in tags: system.tag.readBlocking([t])`) | Múltiples viajes de red hacia el Gateway, disparando el uso de CPU.      | **Lectura por lotes (**_**Batch**_**):** una única llamada `system.tag.readBlocking(lista_completa_tags)`.          |
 | **Supresión silenciosa** (`except: pass`)                                          | Ceguera absoluta ante fallos de hardware o red; depuración imposible.    | **Captura dual tipada** (`Exception` + `Throwable`) con registro contextual en `system.util.getLogger`.             |
 | **Lógica pesada en Script Transforms** (SQL o I/O en vistas Perspective)           | Bloqueo del hilo de renderizado web; pantalla congelada (_UI Freezing_). | **Transforms puros de 1-2 líneas**; delegar cálculos a `Project Library` e I/O a eventos asíncronos.                |
-| **Organización de scripts por programador** (`project.eduardo.test`)               | Pérdida de código al rotar personal; duplicidad de funciones en planta.  | **Organización por dominios funcionales:** `project.production.*`, `project.water_treatment.*`, `project.shared.*`. |
+| **Organización de scripts por programador** (`eduardo.test`)               | Pérdida de código al rotar personal; duplicidad de funciones en planta.  | **Organización por dominios funcionales:** `production.*`, `water_treatment.*`, `shared.*`. |
 | **Uso de `print` en Gateway Scripts**                                              | Mensajes perdidos que no aparecen en la consola del Designer.            | **Logging estructurado:** `system.util.getLogger("SCADA.Modulo")` con niveles `debug`, `info`, `warn`, `error`.     |
 
 **4. Protocolo de Revisión por Pares (**_**Peer Code Review**_**) en Automatización**
@@ -589,7 +589,7 @@ except Exception as err:
 
 #### Objetivos
 
-* Construir un módulo modelo en `Project Library` (`project.templates.service_template`) que sirva como estándar arquitectónico corporativo para todo el equipo de desarrollo SCADA.
+* Construir un módulo modelo en `Project Library` (`templates.service_template`) que sirva como estándar arquitectónico corporativo para todo el equipo de desarrollo SCADA.
 * Integrar en una sola plantilla: constantes de módulo, logger contextual de SLF4J, funciones puras privadas de cálculo (`_calculate_...`) y funciones públicas de servicio con captura dual de excepciones (`JavaException` + `Exception`), validación defensiva de entradas y retornos estructurados `(bool success, dict payload_or_error)`.
 * Validar la plantilla desde la Script Console verificando su adhesión al estándar de desarrollo corporativo.
 
@@ -611,11 +611,11 @@ except Exception as err:
 
 **Paso 2: Implementación de la Plantilla Estándar**
 
-Copiar y guardar el siguiente código canónico en `project.templates.service_template`:
+Copiar y guardar el siguiente código canónico en `templates.service_template`:
 
 ```python
 """
-Modulo: project.templates.service_template
+Modulo: templates.service_template
 Descripcion: Plantilla estandar y clase base corporativa para modulos de logica y servicios en Ignition SCADA.
 Version: 2.0 (Soporte de Herencia POO e Importacion Modular)
 Estandar: Directrices de Ingenieria de Scripting Industrial
@@ -626,7 +626,7 @@ from java.sql import SQLException
 # -----------------------------------------------------------------------------
 # 1. CONSTANTES GLOBALES Y CONFIGURACION POR DEFECTO
 # -----------------------------------------------------------------------------
-DEFAULT_DB_CONNECTION = "SANDBOX_DB"
+DEFAULT_DB_CONNECTION = "DB_Admin"
 DEFAULT_TIMEOUT_MS = 3000
 DEFAULT_AUDIT_TABLE = "ins_Registre_Actuacions"
 
@@ -768,7 +768,7 @@ print "=== VALIDACION LABORATORIO 10.2: PLANTILLA CANONICA DE MODULO ==="
 
 # 1. Caso Nominal Exitoso
 ctx_nominal = {"user": "marti.sanchez", "action": "CALC_ESCALADO_BOMBA"}
-ok1, res1 = project.templates.service_template.execute_plant_service(
+ok1, res1 = templates.service_template.execute_plant_service(
     resource_id="EDAR_BOMBA_01",
     raw_input_val=45.0,
     multiplier=1.5, # 45.0 * 1.5 = 67.50 <= MAX_PHYSICAL_LIMIT (100.0)
@@ -783,7 +783,7 @@ for k, v in res1.items():
 
 # 2. Caso de Rechazo por Parametro No Numerico
 ctx_error = {"user": "operador_noche", "action": "CALC_ERROR_TEST"}
-ok2, res2 = project.templates.service_template.execute_plant_service(
+ok2, res2 = templates.service_template.execute_plant_service(
     resource_id="EDAR_BOMBA_02",
     raw_input_val="TEXTO_INVALIDO",
     multiplier=1.0,
@@ -814,13 +814,13 @@ print " - Mensaje Usuario: ", res2["user_message"]
  - Mensaje Usuario:  Los valores de entrada deben ser numéricos
 ```
 
-**Paso 6: Guía de Aplicación Práctica - Cómo Derivar la Plantilla para Crear un Servicio Real de Planta (`project.equipment.pump_service`)**
+**Paso 6: Guía de Aplicación Práctica - Cómo Derivar la Plantilla para Crear un Servicio Real de Planta (`equipment.pump_service`)**
 
-Una plantilla canónica no debe ejecutarse directamente en planta para la lógica de proceso, sino que actúa como el **molde arquitectónico corporativo**. A continuación se muestra cómo un ingeniero de control utiliza la plantilla para construir un servicio real de maniobra y ajuste de consigna para un grupo de bombeo (`project.equipment.pump_service`).
+Una plantilla canónica no debe ejecutarse directamente en planta para la lógica de proceso, sino que actúa como el **molde arquitectónico corporativo**. A continuación se muestra cómo un ingeniero de control utiliza la plantilla para construir un servicio real de maniobra y ajuste de consigna para un grupo de bombeo (`equipment.pump_service`).
 
 #### 1. Las 4 Reglas de Adaptación de la Plantilla
 
-Para crear cualquier servicio nuevo en `Project Library` a partir de `project.templates.service_template`, se siguen 4 pasos sistemáticos:
+Para crear cualquier servicio nuevo en `Project Library` a partir de `templates.service_template`, se siguen 4 pasos sistemáticos:
 
 1. **Configurar Identidad y Constantes:**
    * Ajustar el identificador del módulo (`MODULE_NAME = "PumpService"`).
@@ -841,25 +841,25 @@ Para crear cualquier servicio nuevo en `Project Library` a partir de `project.te
 
 ***
 
-#### 2. Código del Servicio Real Derivado: `project.equipment.pump_service`
+#### 2. Código del Servicio Real Derivado: `equipment.pump_service`
 
-Crear en **Server Scripting -> Project Library** el script `equipment.pump_service`. Observa cómo **importa y hereda de `project.templates.service_template.BaseSCADAService`**, reutilizando automáticamente toda la lógica de logging, RBAC, auditoría en BD y captura dual de excepciones:
+Crear en **Server Scripting -> Project Library** el script `equipment.pump_service`. Observa cómo **importa y hereda de `templates.service_template.BaseSCADAService`**, reutilizando automáticamente toda la lógica de logging, RBAC, auditoría en BD y captura dual de excepciones:
 
 ```python
 """
-Modulo: project.equipment.pump_service
+Modulo: equipment.pump_service
 Descripcion: Servicio de control operativo, consignas y enclavamientos para grupos de bombeo.
-             Hereda y extiende la clase base corporativa BaseSCADAService (project.templates.service_template).
+             Hereda y extiende la clase base corporativa BaseSCADAService (templates.service_template).
 Version: 2.0 (Arquitectura POO con Herencia de Plantilla Canónica)
 """
-import project.templates.service_template
-from project.templates.service_template import BaseSCADAService
+import templates.service_template
+from templates.service_template import BaseSCADAService
 
 # -----------------------------------------------------------------------------
 # 1. CONSTANTES ESPECIFICAS DEL GRUPO DE BOMBEO
 # -----------------------------------------------------------------------------
 MODULE_NAME = "PumpService"
-DEFAULT_DB_CONNECTION = "SANDBOX_DB"
+DEFAULT_DB_CONNECTION = "DB_Admin"
 TAG_PROVIDER = "[default]"
 
 MIN_FLOW_SETPOINT_M3H = 10.0   # Caudal minimo de recirculacion contra cavitacion
@@ -942,7 +942,7 @@ class PumpEquipmentService(BaseSCADAService):
             return (False, {"error_code": val_code, "user_message": msg})
 
         # C. Verificacion de Enclavamientos de Campo en PLC (readBlocking por lote)
-        tag_prefix = "{}PLANTA_TRATAMIENTO/{}/".format(TAG_PROVIDER, pump_id)
+        tag_prefix = "{}EDAR/{}/".format(TAG_PROVIDER, pump_id)
         tags_enclavamiento = [tag_prefix + "ModoRemoto", tag_prefix + "FalloTermico", tag_prefix + "SetaEmergencia"]
         
         try:
@@ -1006,10 +1006,10 @@ def set_pump_flow_setpoint(pump_id, requested_flow_m3h, user_roles=None, executi
 Abrir la **Script Console** y comprobar cómo el servicio gestiona casos nominales, rechazos por límites físicos y rechazos de seguridad RBAC:
 
 ```python
-print "=== TEST DE SERVICIO REAL DERIVADO: project.equipment.pump_service ==="
+print "=== TEST DE SERVICIO REAL DERIVADO: equipment.pump_service ==="
 
 # 1. Caso Nominal Valido (Usuario Operador, consigna de 75.0 m3/h)
-ok1, res1 = project.equipment.pump_service.set_pump_flow_setpoint(
+ok1, res1 = equipment.pump_service.set_pump_flow_setpoint(
     pump_id="EDAR_BOMBA_01",
     requested_flow_m3h=75.0,
     user_roles=["OPERADOR"],
@@ -1020,7 +1020,7 @@ print " - Exito:", ok1
 print " - Detalle:", res1
 
 # 2. Caso de Rechazo por Limite Fisico (Consigna de 180.0 m3/h > Limite 120.0 m3/h)
-ok2, res2 = project.equipment.pump_service.set_pump_flow_setpoint(
+ok2, res2 = equipment.pump_service.set_pump_flow_setpoint(
     pump_id="EDAR_BOMBA_01",
     requested_flow_m3h=180.0,
     user_roles=["OPERADOR"],
@@ -1032,7 +1032,7 @@ print " - Error Code:   ", res2.get("error_code")
 print " - Mensaje UI:    ", res2.get("user_message")
 
 # 3. Caso de Rechazo por Seguridad RBAC (Usuario sin rol de operacion)
-ok3, res3 = project.equipment.pump_service.set_pump_flow_setpoint(
+ok3, res3 = equipment.pump_service.set_pump_flow_setpoint(
     pump_id="EDAR_BOMBA_01",
     requested_flow_m3h=50.0,
     user_roles=["INVITADO_VISITA"],
@@ -1046,154 +1046,44 @@ print " - Mensaje UI:    ", res3.get("user_message")
 
 ***
 
-#### 4. Consumo Desacoplado del Servicio desde Perspective UI (Paso a Paso en el Designer)
+#### 4. Consumo Directo del Servicio desde Perspective UI (Integración Ligera)
 
-A continuación se detalla cómo construir en Ignition Designer la interfaz gráfica operativa que consume este servicio, garantizando que el diseño sea reactivo, visualmente limpio y totalmente desacoplado del backend.
+El principio fundamental de arquitectura en Ignition SCADA es que **la interfaz de usuario no debe contener lógica de negocio**. Los botones y componentes visuales deben limitarse a llamar a la `Project Library` en 3 a 5 líneas de código.
 
-##### 4.1. Creación de la Vista de Supervisión en Perspective
+##### 4.1. Creación de la Vista en Perspective
 
 1. En el **Project Browser**, navegar a **Perspective -> Views**.
-2. Hacer clic derecho sobre la carpeta `Laboratorios` (o crearla) y seleccionar **New View...**.
-3. Configurar los parámetros de la nueva vista:
-   * **Path:** `Laboratorios/Lab10_2_PumpControl`
-   * **Root Container Type:** Seleccionar **`Flex Container`**.
-   * **Page Title:** `Control y Consignas - Estación de Bombeo`.
-4. Seleccionar el componente `root` de la vista y en el panel de **PROPERTIES** (a la derecha) ajustar:
-   * `direction`: `column`
-   * `justifyContent`: `flex-start`
-   * `alignItems`: `center`
-   * `style.padding`: `20px`
-   * `style.backgroundColor`: `var(--neutral-10, #f8f9fa)`
+2. Crear una vista llamada `Laboratorios/Lab10_2_PumpControl` con contenedor tipo **`Flex Container`** (`direction: column`).
 
-##### 4.2. Definición de Propiedades `custom` de la Vista
+##### 4.2. Estructura Simple de Componentes (Tarjeta de Mando)
 
-En el panel de propiedades de la vista, añadir en la sección **`custom`** las siguientes propiedades para centralizar la telemetría y el estado del equipo:
-
-* `custom.pumpId`: `"EDAR_BOMBA_01"` (String)
-* `custom.tagBasePath`: `"[default]PLANTA_TRATAMIENTO/EDAR_BOMBA_01/"` (String)
-* `custom.lastStatusMsg`: `""` (String)
-* `custom.isSuccess`: `true` (Boolean)
-
-##### 4.3. Construcción del Panel de Mando (Estructura de Componentes)
-
-Arrastrar dentro de `root` los siguientes contenedores y componentes desde la paleta de Perspective (**Component Palette**):
+Arrastrar únicamente 3 componentes dentro de `root`:
 
 ```
 root (Flex Container - column)
- └── pnl_CardBomba (Flex Container - column, tarjeta con borde y sombra suave)
-      ├── lbl_Titulo (Label: Encabezado del equipo)
-      ├── pnl_Lecturas (Flex Container - row: Telemetría actual)
-      │    ├── lbl_CaudalActual (Label: Tag de lectura en vivo)
-      │    └── lbl_EstadoRemoto (Label: Indicador de modo Local/Remoto)
-      ├── pnl_AjusteConsigna (Flex Container - row: Selector de nueva consigna)
-      │    ├── lbl_Prompt (Label: "Nueva Consigna:")
-      │    ├── num_ConsignaCaudal (Numeric Entry Field: Entrada de m³/h)
-      │    └── lbl_Unidad (Label: "m³/h")
-      ├── btn_AplicarConsigna (Button: Botón de envío seguro con confirmación)
-      └── lbl_FeedbackOperador (Label: Notificación contextual con cambio de color)
+ ├── lbl_Titulo (Label: "CONTROL DE CONSIGNA - BOMBA 01")
+ ├── num_Consigna (Numeric Entry Field: Entrada de consigna, valor inicial 50.0)
+ └── btn_Enviar (Button: "APLICAR CONSIGNA")
 ```
 
-##### 4.4. Configuración y Propiedades de los Componentes
+##### 4.3. Script del Botón (`onActionPerformed` de 4 Líneas)
 
-Configurar cada elemento en el panel de propiedades:
-
-| Componente | Nombre | Propiedad | Configuración / Binding en Designer |
-| :--- | :--- | :--- | :--- |
-| **Flex Container** | `pnl_CardBomba` | `style` | `width: 480px`, `backgroundColor: #ffffff`, `borderRadius: 8px`, `padding: 24px`, `boxShadow: 0 4px 12px rgba(0,0,0,0.08)` |
-| **Label** | `lbl_Titulo` | `props.text` | `"GRUPO DE BOMBEO - EDAR_BOMBA_01"` (Estilo: negrita 16px, color `#2c3e50`) |
-| **Label** | `lbl_CaudalActual` | `props.text` | **Tag Binding:** `[default]PLANTA_TRATAMIENTO/EDAR_BOMBA_01/CaudalActual`<br>*(Si no existe el tag, valor fijo simulado: `"Caudal Actual: 68.4 m³/h"`)* |
-| **Numeric Entry** | `num_ConsignaCaudal` | `props.value`<br>`props.format` | **Valor inicial:** `50.0`<br>**Format:** `#,##0.0`<br>**Límites:** `props.spinner.min: 0.0`, `props.spinner.max: 150.0` |
-| **Button** | `btn_AplicarConsigna` | `props.text`<br>`props.style` | **Texto:** `"APLICAR CONSIGNA SEGURA"`<br>**Estilo:** `backgroundColor: #1976d2`, `color: #ffffff`, `fontWeight: bold`, `height: 42px`, `borderRadius: 4px` |
-| **Label** | `lbl_FeedbackOperador`| `props.text`<br>`props.style.color` | **Binding Property a `view.custom.lastStatusMsg`**.<br>Color con Expression Binding: `if({view.custom.isSuccess}, '#27ae60', '#e74c3c')` |
-
-##### 4.5. Implementación del Evento `onActionPerformed` en el Botón
-
-1. Seleccionar el botón `btn_AplicarConsigna`.
-2. En el panel de eventos (icono de rayo o clic derecho -> **Configure Actions...**), seleccionar **Events -> onActionPerformed**.
-3. Añadir una acción de tipo **Script** y pegar el siguiente código:
+1. Clic derecho en `btn_Enviar` -> **Configure Actions...** -> **Events -> onActionPerformed**.
+2. Añadir acción tipo **Script**. El script delega el 100% de la lógica al servicio en `Project Library`:
 
 ```python
-# =============================================================================
-# Evento onActionPerformed: Envío Seguro y Desacoplado a Project Library
-# =============================================================================
+sp = self.getSibling("num_Consigna").props.value
+usr = self.session.props.auth.user.userName if self.session.props.auth.authenticated else "operador_planta"
+ok, res = project.equipment.pump_service.set_pump_flow_setpoint("EDAR_BOMBA_01", sp, ["OPERADOR"], {"user": usr})
 
-# 1. Extracción segura del contexto del operador autenticado
-if self.session.props.auth.authenticated:
-    user_name = self.session.props.auth.user.userName
-    user_roles = list(self.session.props.auth.user.roles)
-else:
-    # Contexto para pruebas en Designer / Operador de turno local
-    user_name = "operador_designer"
-    user_roles = ["OPERADOR", "MANTENIMIENTO"]
-
-# 2. Obtención de parámetros de la vista
-pump_id = self.view.custom.pumpId
-requested_flow = self.getSibling("pnl_AjusteConsigna").getChild("num_ConsignaCaudal").props.value
-
-context = {
-    "user": user_name,
-    "action": "CAMBIO_CONSIGNA_PERSPECTIVE"
-}
-
-# 3. Invocación de la función canónica de servicio en Project Library
-ok, response = project.equipment.pump_service.set_pump_flow_setpoint(
-    pump_id=pump_id,
-    requested_flow_m3h=requested_flow,
-    user_roles=user_roles,
-    execution_context=context
-)
-
-# 4. Actualización del estado visual y feedback reactivo
-self.view.custom.isSuccess = ok
-
-if ok:
-    msg_exito = u"Consigna de {:.1f} m³/h aplicada y registrada con éxito".format(response["applied_setpoint_m3h"])
-    self.view.custom.lastStatusMsg = msg_exito
-    # Notificación Toast nativa en la esquina superior del navegador
-    system.perspective.sendMessage(
-        "notify_toast", 
-        payload={"msg": msg_exito, "type": "success"}, 
-        scope="page"
-    )
-    # Refresco reactivo de componentes suscritos a la página
-    system.perspective.sendMessage(
-        "refresh_pump_telemetry", 
-        payload={"pump_id": pump_id}, 
-        scope="page"
-    )
-else:
-    msg_error = response.get("user_message", u"Error desconocido en la maniobra")
-    self.view.custom.lastStatusMsg = msg_error
-    system.perspective.sendMessage(
-        "notify_toast", 
-        payload={"msg": msg_error, "type": "error"}, 
-        scope="page"
-    )
+system.perspective.sendMessage("notify_toast", {"msg": "Consigna OK: {} m3/h".format(res["applied_setpoint_m3h"]) if ok else res["user_message"]}, scope="page")
 ```
 
-##### 4.6. Configuración del Message Handler para Refresco Asíncrono
+##### 4.4. Verificación Rápida en Modo Preview
 
-Para que la vista actualice la telemetría tras el guardado sin bloquear el hilo web:
-1. En el Project Browser, hacer clic derecho sobre la vista `Lab10_2_PumpControl` y seleccionar **Configure Message Handlers...**.
-2. Añadir un nuevo handler:
-   * **Message Type:** `refresh_pump_telemetry`
-   * **Scope:** Marcar casilla **`Page`**.
-   * **Script:**
-     ```python
-     # Refresca los bindings vinculados a las lecturas del equipo
-     self.getChild("root").getChild("pnl_CardBomba").getChild("pnl_Lecturas").getChild("lbl_CaudalActual").refreshBinding("props.text")
-     ```
-
-##### 4.7. Verificación del Funcionamiento en Modo Interactivo
-
-1. Activar el modo interactivo del Designer (**Preview Mode** o pulsar el icono de reproducción `Play` / `F5`).
-2. Introducir un valor nominal válido (ej. `65.0 m³/h`) y pulsar **APLICAR CONSIGNA SEGURA**:
-   * Verificar que la etiqueta de feedback se vuelve verde con el texto de éxito.
-   * Abrir la base de datos `SANDBOX_DB` y comprobar que la tabla `ins_Registre_Actuacions` tiene la nueva fila de auditoría con el usuario y la fecha actual.
-3. Probar un valor fuera de límites físicos (ej. `180.0 m³/h` o `5.0 m³/h`):
-   * Comprobar que el servicio rechaza la maniobra de forma instantánea y la etiqueta muestra el mensaje en color rojo (`Consigna excede la capacidad máxima de la bomba`), sin lanzar excepciones no controladas a la pantalla.
-
-> **Beneficio de la Arquitectura Canónica:** La vista web de Perspective queda completamente protegida y desacoplada: no contiene consultas SQL, no accede a tags directamente, no sufre bloqueos y delega la seguridad y la persistencia al servicio de backend.
+1. Activar el **Preview Mode** (`F5` en el Designer).
+2. Introducir `60.0` y pulsar **APLICAR CONSIGNA** $\rightarrow$ El servicio valida límites, enclavamientos y registra la auditoría en BD sin que la interfaz tenga que preocuparse por conexiones ni excepciones.
+3. Introducir `200.0` $\rightarrow$ El backend rechaza la maniobra de forma instantánea y devuelve el mensaje de error controlado al operador.
 
 ***
 
@@ -1225,19 +1115,19 @@ El proyecto integrador se articula a través de 6 capas estrictamente desacoplad
   * _`Production/GetShiftSummary`:_ Consulta analítica que calcula totales producidos, unidades defectuosas y ratio de scrap por máquina y turno para un rango temporal indexado.
   * _`Production/CloseBatchWithAudit`:_ Consulta de modificación protegida mediante _Value Parameters_ que cierra el lote y actualiza la pista de auditoría.
 * **Capa 3: Lógica de Negocio y Orquestación en `Project Library`**
-  * _Módulo de Cálculo Puro (`project.oee.calculations`):_
+  * _Módulo de Cálculo Puro (`oee.calculations`):_
     * `calculate_availability(operating_time_min, planned_time_min)`
     * `calculate_performance(total_units, operating_time_min, ideal_cycle_sec)`
     * `calculate_quality(good_units, total_units)`
     * `calculate_global_oee(availability_pct, performance_pct, quality_pct)`
     * Todas las funciones implementan validaciones defensivas contra nulos y división por cero.
-  * _Módulo de Servicio y Transaccionalidad (`project.production.batch_service`):_
+  * _Módulo de Servicio y Transaccionalidad (`production.batch_service`):_
     * `close_batch_transactional(batch_id, shift_id, user_roles, execution_context)`
     * Orquestación transaccional con control de roles (RBAC) en servidor, logging contextual estructurado y captura dual de excepciones.
 * **Capa 4: Presentación e Interfaz de Operador en Perspective**
   * Vista de supervisión reactiva (`Views/Laboratorios/Lab11_OEE_Dashboard`):
     * KPI Cards de Disponibilidad, Rendimiento, Calidad y OEE global.
-    * Script Transforms ultra-ligeros (1-2 líneas) que delegan el cálculo a `project.oee.calculations`.
+    * Script Transforms ultra-ligeros (1-2 líneas) que delegan el cálculo a `oee.calculations`.
     * Message Handlers desacoplados para actualización fluida sin bloquear el hilo web del operador.
 * **Capa 5: Automatización Desatendida en Gateway (Quartz Scheduler)**
   * _Gateway Scheduled Script (`ShiftEndConsolidation`):_
@@ -1258,8 +1148,8 @@ flowchart TD
     end
 
     subgraph Capa3 [Capa 3: Logica de Negocio - Project Library]
-        PureLogic[project.oee.calculations: Funciones Puras OEE / Calidad]
-        ServiceOrch[project.production.batch_service: Transacciones ACID + RBAC + Logging]
+        PureLogic[oee.calculations: Funciones Puras OEE / Calidad]
+        ServiceOrch[production.batch_service: Transacciones ACID + RBAC + Logging]
     end
 
     subgraph Capa4 [Capa 4: Presentacion - Perspective UI]
@@ -1295,7 +1185,7 @@ El proyecto final de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-sca
 | ------------------------------------- | :-----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **1. Ciberseguridad y RBAC**          | **20%** | Ausencia total de concatenación en SQL (0 vulnerabilidades SQLi); validación imperativa de roles (RBAC) en la capa de servicio de backend en servidor y no solo en botones visuales.                |
 | **2. Rendimiento y No-Bloqueo de UI** | **20%** | Cero lecturas unitarias de tags en bucles (agrupación en `system.tag.readBlocking`); Script Transforms livianos sin llamadas JDBC ni I/O pesada; actualización asíncrona mediante Message Handlers. |
-| **3. Arquitectura y Modularidad**     | **20%** | Aislamiento estricto entre funciones puras de cálculo (`project.oee.calculations`) y funciones de servicio de orquestación; reutilización de la plantilla canónica desarrollada en la Sesión 10.    |
+| **3. Arquitectura y Modularidad**     | **20%** | Aislamiento estricto entre funciones puras de cálculo (`oee.calculations`) y funciones de servicio de orquestación; reutilización de la plantilla canónica desarrollada en la Sesión 10.    |
 | **4. Robustez y Tolerancia a Fallos** | **15%** | Captura dual sistemática (`Exception` + `JavaException` / `Throwable`); manejo defensivo de valores `None` e inputs incoherentes; diseño estrictamente idempotente en tareas desatendidas.          |
 | **5. Calidad de Código y Estándares** | **15%** | Cumplimiento de la guía de estilo PEP 8 adaptada a Jython; docstrings completos con unidades físicas en argumentos; nombres semánticos de variables y constantes en `UPPER_SNAKE_CASE`.             |
 | **6. Testing Funcional (QA)**         | **10%** | Batería de pruebas unitarias automatizada en la Script Console que valide casos nominales, casos límite (división por cero) y casos nulos con un 100% de aserciones aprobadas (`[ PASS ]`).         |
@@ -1304,9 +1194,9 @@ El proyecto final de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-sca
 
 Antes de iniciar la jornada de trabajo de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md), cada participante debe comprobar:
 
-* [x] Disponer de acceso operativo a **Ignition Designer** conectado a la base de datos `SANDBOX_DB`.
+* [x] Disponer de acceso operativo a **Ignition Designer** conectado a la base de datos `DB_Admin`.
 * [x] Tener probada y comprendida la clase `SCADATestSuite` implementada en el [Laboratorio 10.1](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-10.md#3-laboratorio-101-suite-de-testing-automatizado-en-script-console).
-* [x] Disponer del módulo canónico `project.templates.service_template` implementado en el [Laboratorio 10.2](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-10.md#5-laboratorio-102-implementacion-de-plantilla-canonica-de-modulo-para-project-library) como base para la lógica de orquestación.
+* [x] Disponer del módulo canónico `templates.service_template` implementado en el [Laboratorio 10.2](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-10.md#5-laboratorio-102-implementacion-de-plantilla-canonica-de-modulo-para-project-library) como base para la lógica de orquestación.
 * [x] Haber revisado los fundamentos matemáticos de los factores del OEE (Disponibilidad, Rendimiento y Calidad).
 
 #### Resultado esperado
