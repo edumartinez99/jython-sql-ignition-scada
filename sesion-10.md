@@ -616,73 +616,118 @@ Copiar y guardar el siguiente código canónico en `project.templates.service_te
 ```python
 """
 Modulo: project.templates.service_template
-Descripcion: Plantilla estandar corporativa para modulos de logica y servicios en Ignition SCADA.
-Version: 1.0
+Descripcion: Plantilla estandar y clase base corporativa para modulos de logica y servicios en Ignition SCADA.
+Version: 2.0 (Soporte de Herencia POO e Importacion Modular)
 Estandar: Directrices de Ingenieria de Scripting Industrial
 """
 from java.lang import Exception as JavaException
 from java.sql import SQLException
 
 # -----------------------------------------------------------------------------
-# 1. CONSTANTES DEL MODULO (UPPER_SNAKE_CASE)
+# 1. CONSTANTES GLOBALES Y CONFIGURACION POR DEFECTO
 # -----------------------------------------------------------------------------
-MODULE_NAME = "ServiceTemplate"
 DEFAULT_DB_CONNECTION = "SANDBOX_DB"
 DEFAULT_TIMEOUT_MS = 3000
-MAX_PHYSICAL_LIMIT = 100.0
-
-# -----------------------------------------------------------------------------
-# 2. LOGGER CONTEXTUAL CENTRALIZADO (SLF4J / Gateway Core)
-# -----------------------------------------------------------------------------
-LOGGER = system.util.getLogger("SCADA.{}".format(MODULE_NAME))
+DEFAULT_AUDIT_TABLE = "ins_Registre_Actuacions"
 
 
 # -----------------------------------------------------------------------------
-# 3. FUNCIONES PURAS PRIVADAS (Calculo matematico sin I/O, 100% testeables)
+# 2. CLASE BASE DE SERVICIO SCADA (Para herencia directa en servicios especificos)
 # -----------------------------------------------------------------------------
-def _calculate_scaled_value(raw_value, scale_factor):
+class BaseSCADAService(object):
     """
-    Funcion pura interna: aplica factor de escala y validacion de limite fisico.
-    
-    Args:
-        raw_value (float): Valor bruto leido de sensor o base de datos.
-        scale_factor (float): Multiplicador de ingenieria.
+    Clase base reutilizable que encapsula el ciclo de vida de un servicio industrial:
+    - Control de acceso RBAC
+    - Logging contextual parametrizado (SLF4J)
+    - Pistas inmutables de auditoria en base de datos
+    - Captura dual y robusta de excepciones Java / Jython
+    """
+    def __init__(self, module_name, db_connection=DEFAULT_DB_CONNECTION):
+        self.module_name = module_name
+        self.db_connection = db_connection
+        self.logger = system.util.getLogger("SCADA.{}".format(module_name))
+
+    def check_rbac(self, user_roles, authorized_roles):
+        """
+        Valida si los roles del usuario contienen al menos un rol autorizado.
         
-    Returns:
-        float: Valor escalado acotado al limite maximo de seguridad.
-    """
+        Args:
+            user_roles (iterable): Roles del usuario en sesion.
+            authorized_roles (iterable): Roles con permiso para la maniobra.
+            
+        Returns:
+            bool: True si el acceso es concedido, False si es denegado.
+        """
+        user_set = set(user_roles) if user_roles else set()
+        auth_set = set(authorized_roles) if authorized_roles else set()
+        return bool(user_set.intersection(auth_set))
+
+    def record_audit(self, equipment_id, description, user_str):
+        """
+        Registra una operacion de maniobra en la tabla relacional de auditoria.
+        """
+        sql = """
+            INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """
+        system.db.runPrepUpdate(sql, [str(equipment_id), description, str(user_str)], database=self.db_connection)
+
+    def dispatch_transaction(self, action_name, equipment_id, user_str, operation_fn):
+        """
+        Orquesta la transaccion aplicando captura dual (Java/SQL/Python) y garantia de formato uniforme.
+        
+        Args:
+            action_name (str): Nombre descriptivo de la maniobra.
+            equipment_id (str): Identificador del equipo.
+            user_str (str): Nombre del usuario operador.
+            operation_fn (callable): Callback que ejecuta la logica de negocio y retorna el payload.
+            
+        Returns:
+            tuple: (bool success, dict payload_or_error)
+        """
+        self.logger.debug("[{}] Ejecutando servicio sobre '{}' por '{}'".format(action_name, equipment_id, user_str))
+        try:
+            payload = operation_fn()
+            # Si el callback no genero error, emite log informativo y exito
+            self.logger.info("[{}] Maniobra completada exitosamente sobre '{}'".format(action_name, equipment_id))
+            return (True, payload)
+            
+        except SQLException as sql_ex:
+            self.logger.error("[{}] Error JDBC/SQL en '{}': {}".format(action_name, equipment_id, sql_ex.getMessage()), sql_ex)
+            return (False, {"error_code": "DB_TRANSACTION_ERROR", "user_message": u"Error de persistencia en base de datos"})
+            
+        except JavaException as java_ex:
+            self.logger.error("[{}] Error Java/Gateway en '{}': {}".format(action_name, equipment_id, java_ex.getMessage()), java_ex)
+            return (False, {"error_code": "GATEWAY_RUNTIME_ERROR", "user_message": u"Fallo de comunicación en servidor Gateway"})
+            
+        except Exception as py_ex:
+            self.logger.error("[{}] Error no controlado en '{}': {}".format(action_name, equipment_id, str(py_ex)))
+            return (False, {"error_code": "INTERNAL_LOGIC_ERROR", "user_message": u"Error interno de procesamiento"})
+
+
+# -----------------------------------------------------------------------------
+# 3. FUNCIONES PURAS Y COMPATIBILIDAD FUNCIONAL DIRECTA
+# -----------------------------------------------------------------------------
+def _calculate_scaled_value(raw_value, scale_factor, max_limit=100.0):
+    """Calculo matematico puro desacoplado de I/O."""
     if raw_value is None or scale_factor is None:
         return 0.0
     scaled = float(raw_value) * float(scale_factor)
-    return round(min(scaled, MAX_PHYSICAL_LIMIT), 2)
+    return round(min(scaled, max_limit), 2)
 
 
-# -----------------------------------------------------------------------------
-# 4. FUNCIONES PUBLICAS DE SERVICIO (Orquestacion, I/O, Seguridad y Captura Dual)
-# -----------------------------------------------------------------------------
 def execute_plant_service(resource_id, raw_input_val, multiplier, execution_context=None):
     """
-    Punto de entrada publico del servicio de planta.
-    Valida entradas, ejecuta calculo puro, interactua con persistencia y emite auditoria.
-    
-    Args:
-        resource_id (str): Identificador del equipo o lote (ej. 'EDAR_BOMBA_01').
-        raw_input_val (float|int): Valor primario de entrada de telemetria.
-        multiplier (float): Factor multiplicador de calculo.
-        execution_context (dict, optional): Contexto de ejecucion {'user': str, 'action': str}.
-        
-    Returns:
-        tuple: (bool success, dict payload_or_error)
-            - Si success es True:  payload contiene {'resource_id', 'result_value', 'timestamp'}.
-            - Si success es False: payload contiene {'error_code', 'user_message'}.
+    Punto de entrada funcional que utiliza la clase base para despachar el servicio.
     """
     ctx = execution_context if isinstance(execution_context, dict) else {}
     user_str = ctx.get("user", "SYSTEM")
     action_str = ctx.get("action", "DEFAULT_ACTION")
     
-    LOGGER.debug("[{}] Iniciando servicio para '{}'. Usuario: '{}'".format(action_str, resource_id, user_str))
+    # Instanciamos la clase base
+    service = BaseSCADAService(module_name="ServiceTemplate")
     
-    # A. Validaciones Defensivas de Entrada
+    # Validacion defensiva de parametros
     if not resource_id or not str(resource_id).strip():
         return (False, {"error_code": "INVALID_RESOURCE_ID", "user_message": u"Identificador de recurso no válido"})
         
@@ -694,40 +739,19 @@ def execute_plant_service(resource_id, raw_input_val, multiplier, execution_cont
         
     if val_in < 0.0 or mult_in < 0.0:
         return (False, {"error_code": "OUT_OF_RANGE", "user_message": u"Los valores no pueden ser negativos"})
-        
-    try:
-        # B. Ejecucion de Calculo Puro Aislado
-        calculated_metric = _calculate_scaled_value(val_in, mult_in)
-        
-        # C. Persistencia Segura y Auditoria mediante Named Query o Prepared Statement
-        audit_desc = u"Ejecución de servicio {} -> Valor calculado: {:.2f}".format(unicode(action_str), calculated_metric)
-        audit_sql = """
-            INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        """
-        system.db.runPrepUpdate(audit_sql, [str(resource_id), audit_desc, user_str], database=DEFAULT_DB_CONNECTION)
-        
-        # D. Retorno Estructurado Exitoso
-        result_payload = {
+
+    # Definimos la operacion de negocio interna
+    def _do_work():
+        calc_val = _calculate_scaled_value(val_in, mult_in)
+        desc = u"Ejecución {} -> Valor: {:.2f}".format(unicode(action_str), calc_val)
+        service.record_audit(resource_id, desc, user_str)
+        return {
             "resource_id": str(resource_id),
-            "result_value": calculated_metric,
+            "result_value": calc_val,
             "timestamp": system.date.format(system.date.now(), "dd/MM/yyyy HH:mm:ss")
         }
-        
-        LOGGER.info("[{}] Servicio completado con éxito para '{}'. Resultado: {}".format(action_str, resource_id, calculated_metric))
-        return (True, result_payload)
-        
-    except SQLException as sql_ex:
-        LOGGER.error("Error SQL/JDBC en servicio para '{}': {}".format(resource_id, sql_ex.getMessage()), sql_ex)
-        return (False, {"error_code": "DB_TRANSACTION_ERROR", "user_message": u"Error de persistencia en la base de datos"})
-        
-    except JavaException as java_ex:
-        LOGGER.error("Error Java/Gateway en servicio para '{}': {}".format(resource_id, java_ex.getMessage()), java_ex)
-        return (False, {"error_code": "GATEWAY_RUNTIME_ERROR", "user_message": u"Error de comunicación con el servidor"})
-        
-    except Exception as py_ex:
-        LOGGER.error("Error no controlado en servicio para '{}': {}".format(resource_id, str(py_ex)))
-        return (False, {"error_code": "INTERNAL_LOGIC_ERROR", "user_message": u"Error interno de procesamiento"})
+
+    return service.dispatch_transaction(action_str, resource_id, user_str, _do_work)
 ```
 
 **Paso 3: Guardar el Proyecto en Gateway**
@@ -819,38 +843,32 @@ Para crear cualquier servicio nuevo en `Project Library` a partir de `project.te
 
 #### 2. Código del Servicio Real Derivado: `project.equipment.pump_service`
 
-Crear en **Server Scripting -> Project Library** el script `equipment.pump_service` e implementar el siguiente código:
+Crear en **Server Scripting -> Project Library** el script `equipment.pump_service`. Observa cómo **importa y hereda de `project.templates.service_template.BaseSCADAService`**, reutilizando automáticamente toda la lógica de logging, RBAC, auditoría en BD y captura dual de excepciones:
 
 ```python
 """
 Modulo: project.equipment.pump_service
 Descripcion: Servicio de control operativo, consignas y enclavamientos para grupos de bombeo.
-             Construido sobre la plantilla canonica corporativa (service_template).
-Version: 1.0
+             Hereda y extiende la clase base corporativa BaseSCADAService (project.templates.service_template).
+Version: 2.0 (Arquitectura POO con Herencia de Plantilla Canónica)
 """
-from java.lang import Exception as JavaException
-from java.sql import SQLException
+import project.templates.service_template
+from project.templates.service_template import BaseSCADAService
 
 # -----------------------------------------------------------------------------
-# 1. CONSTANTES DEL SERVICIO (UPPER_SNAKE_CASE)
+# 1. CONSTANTES ESPECIFICAS DEL GRUPO DE BOMBEO
 # -----------------------------------------------------------------------------
 MODULE_NAME = "PumpService"
 DEFAULT_DB_CONNECTION = "SANDBOX_DB"
 TAG_PROVIDER = "[default]"
 
-# Limites fisicos de ingenieria del grupo de bombeo
 MIN_FLOW_SETPOINT_M3H = 10.0   # Caudal minimo de recirculacion contra cavitacion
 MAX_FLOW_SETPOINT_M3H = 120.0  # Capacidad maxima nominal de la bomba
 ROLES_AUTORIZADOS = set(["OPERADOR", "MANTENIMIENTO", "INGENIERIA", "Administrator"])
 
-# -----------------------------------------------------------------------------
-# 2. LOGGER CONTEXTUAL CENTRALIZADO
-# -----------------------------------------------------------------------------
-LOGGER = system.util.getLogger("SCADA.Equipment.{}".format(MODULE_NAME))
-
 
 # -----------------------------------------------------------------------------
-# 3. FUNCIONES PURAS PRIVADAS (Sin I/O, 100% testeables en aislamiento)
+# 2. FUNCIONES PURAS PRIVADAS (Sin I/O, 100% testeables en aislamiento)
 # -----------------------------------------------------------------------------
 def _validate_and_clamp_flow_setpoint(requested_flow):
     """
@@ -880,104 +898,105 @@ def _validate_and_clamp_flow_setpoint(requested_flow):
 
 
 # -----------------------------------------------------------------------------
-# 4. FUNCION PUBLICA DE SERVICIO (Orquestacion, RBAC, Tags, Persistencia y Captura Dual)
+# 3. CLASE DERIVADA CON HERENCIA POO DE LA PLANTILLA CANONICA
 # -----------------------------------------------------------------------------
+class PumpEquipmentService(BaseSCADAService):
+    """
+    Servicio de Bombeo que hereda de BaseSCADAService:
+    Hereda:
+      - self.logger (configurado para 'SCADA.Equipment.PumpService')
+      - self.check_rbac()
+      - self.record_audit()
+      - self.dispatch_transaction() con captura dual
+    """
+    def __init__(self, db_connection=DEFAULT_DB_CONNECTION):
+        super(PumpEquipmentService, self).__init__(
+            module_name="Equipment.{}".format(MODULE_NAME), 
+            db_connection=db_connection
+        )
+
+    def apply_flow_setpoint(self, pump_id, requested_flow_m3h, user_roles=None, execution_context=None):
+        ctx = execution_context if isinstance(execution_context, dict) else {}
+        user_str = ctx.get("user", "OPERADOR_LOCAL")
+        roles = user_roles if user_roles else []
+        action_name = "SET_PUMP_FLOW"
+
+        # A. Validacion RBAC heredada de la clase base
+        if not self.check_rbac(roles, ROLES_AUTORIZADOS):
+            self.logger.warn("Acceso denegado: Usuario '{}' sin roles para maniobrar '{}'.".format(user_str, pump_id))
+            return (False, {
+                "error_code": "SEC_UNAUTHORIZED",
+                "user_message": u"Acceso denegado: Se requieren permisos de Operación o Mantenimiento."
+            })
+
+        # B. Validacion de Limites Fisicos (Funcion pura)
+        is_valid, safe_sp, val_code = _validate_and_clamp_flow_setpoint(requested_flow_m3h)
+        if not is_valid:
+            self.logger.warn("Consigna rechazada para '{}'. Motivo: {}".format(pump_id, val_code))
+            if val_code == "ERR_FLOW_BELOW_MINIMUM":
+                msg = u"Consigna inferior al caudal mínimo de seguridad ({} m³/h)".format(MIN_FLOW_SETPOINT_M3H)
+            elif val_code == "ERR_FLOW_EXCEEDS_MAXIMUM":
+                msg = u"Consigna excede la capacidad máxima de la bomba ({} m³/h)".format(MAX_FLOW_SETPOINT_M3H)
+            else:
+                msg = u"Valor de consigna numérico no válido."
+            return (False, {"error_code": val_code, "user_message": msg})
+
+        # C. Verificacion de Enclavamientos de Campo en PLC (readBlocking por lote)
+        tag_prefix = "{}PLANTA_TRATAMIENTO/{}/".format(TAG_PROVIDER, pump_id)
+        tags_enclavamiento = [tag_prefix + "ModoRemoto", tag_prefix + "FalloTermico", tag_prefix + "SetaEmergencia"]
+        
+        try:
+            q_vals = system.tag.readBlocking(tags_enclavamiento)
+            if all(q.quality.isGood() for q in q_vals):
+                is_remote = bool(q_vals[0].value)
+                thermal_fault = bool(q_vals[1].value)
+                e_stop = bool(q_vals[2].value)
+                
+                if not is_remote:
+                    return (False, {"error_code": "INTERLOCK_LOCAL_MODE", "user_message": u"La bomba está en mando LOCAL físico. Maniobra remota bloqueada."})
+                if thermal_fault:
+                    return (False, {"error_code": "INTERLOCK_THERMAL_FAULT", "user_message": u"Bomba en fallo térmico. Requiere rearme en cuadro."})
+                if e_stop:
+                    return (False, {"error_code": "INTERLOCK_ESTOP_ACTIVE", "user_message": u"Paro de emergencia activado en la zona de bombeo."})
+        except Exception as tag_read_ex:
+            self.logger.warn("Advertencia al leer enclavamientos de campo (modo simulado): {}".format(str(tag_read_ex)))
+
+        # D. Maniobra de Escritura y Auditoria despachada con la captura dual heredada
+        def _execute_write_and_audit():
+            # Escritura en PLC
+            tag_sp = tag_prefix + "ConsignaCaudal"
+            system.tag.writeBlocking([tag_sp], [safe_sp])
+            
+            # Auditoria en Base de Datos relacional heredada
+            audit_desc = u"Ajuste consigna caudal {} -> {:.2f} m3/h".format(pump_id, safe_sp)
+            self.record_audit(pump_id, audit_desc, user_str)
+            
+            return {
+                "pump_id": str(pump_id),
+                "applied_setpoint_m3h": safe_sp,
+                "user": user_str,
+                "timestamp": system.date.format(system.date.now(), "dd/MM/yyyy HH:mm:ss")
+            }
+
+        return self.dispatch_transaction(action_name, pump_id, user_str, _execute_write_and_audit)
+
+
+# -----------------------------------------------------------------------------
+# 4. INSTANCIA SINGLETON Y API PUBLICA MODULAR
+# -----------------------------------------------------------------------------
+_service_instance = PumpEquipmentService()
+
 def set_pump_flow_setpoint(pump_id, requested_flow_m3h, user_roles=None, execution_context=None):
     """
-    Aplica una nueva consigna de caudal a un grupo de bombeo en el PLC, previa validacion
-    de enclavamientos fisicos de seguridad, control RBAC y registro de auditoria inmutable.
-    
-    Args:
-        pump_id (str): Identificador del equipo (ej. 'BOMBA_01', 'EDAR_BOMBA_02').
-        requested_flow_m3h (float|int): Caudal de consigna deseado en m3/h.
-        user_roles (list|set, optional): Roles del usuario autenticado en la sesion.
-        execution_context (dict, optional): {'user': str, 'workstation': str}.
-        
-    Returns:
-        tuple: (bool success, dict result_payload_or_error)
+    Punto de entrada publico estandar de Project Library para ser consumido
+    desde Perspective, Vision, WebDev o Scripts Console.
     """
-    ctx = execution_context if isinstance(execution_context, dict) else {}
-    user_str = ctx.get("user", "OPERADOR_LOCAL")
-    roles = set(user_roles) if user_roles else set()
-    
-    LOGGER.info("Solicitud cambio consigna para '{}' a {} m3/h. Solicitante: '{}'".format(
-        pump_id, requested_flow_m3h, user_str
-    ))
-    
-    # A. Validacion de Seguridad RBAC en Servidor
-    if not roles.intersection(ROLES_AUTORIZADOS):
-        LOGGER.warn("Acceso denegado: Usuario '{}' sin roles suficientes para maniobrar '{}'.".format(user_str, pump_id))
-        return (False, {
-            "error_code": "SEC_UNAUTHORIZED",
-            "user_message": u"Acceso denegado: Se requieren permisos de Operación o Mantenimiento."
-        })
-        
-    # B. Validacion de Parametros y Limites Fisicos (Funcion Pura)
-    is_valid, safe_sp, val_code = _validate_and_clamp_flow_setpoint(requested_flow_m3h)
-    if not is_valid:
-        LOGGER.warn("Consigna rechazada para '{}'. Motivo: {}".format(pump_id, val_code))
-        if val_code == "ERR_FLOW_BELOW_MINIMUM":
-            msg = u"Consigna inferior al caudal mínimo de seguridad ({} m³/h)".format(MIN_FLOW_SETPOINT_M3H)
-        elif val_code == "ERR_FLOW_EXCEEDS_MAXIMUM":
-            msg = u"Consigna excede la capacidad máxima de la bomba ({} m³/h)".format(MAX_FLOW_SETPOINT_M3H)
-        else:
-            msg = u"Valor de consigna numérico no válido."
-        return (False, {"error_code": val_code, "user_message": msg})
-
-    # C. Verificacion de Enclavamientos de Campo (Lectura por lote con readBlocking)
-    tag_prefix = "{}PLANTA_TRATAMIENTO/{}/".format(TAG_PROVIDER, pump_id)
-    tags_enclavamiento = [tag_prefix + "ModoRemoto", tag_prefix + "FalloTermico", tag_prefix + "SetaEmergencia"]
-    
-    try:
-        q_vals = system.tag.readBlocking(tags_enclavamiento)
-        # Si los tags existen en el provider, evaluamos los enclavamientos
-        if all(q.quality.isGood() for q in q_vals):
-            is_remote = bool(q_vals[0].value)
-            thermal_fault = bool(q_vals[1].value)
-            e_stop = bool(q_vals[2].value)
-            
-            if not is_remote:
-                return (False, {"error_code": "INTERLOCK_LOCAL_MODE", "user_message": u"La bomba está en mando LOCAL físico. Maniobra remota bloqueada."})
-            if thermal_fault:
-                return (False, {"error_code": "INTERLOCK_THERMAL_FAULT", "user_message": u"Bomba en fallo térmico. Requiere rearme en cuadro."})
-            if e_stop:
-                return (False, {"error_code": "INTERLOCK_ESTOP_ACTIVE", "user_message": u"Paro de emergencia activado en la zona de bombeo."})
-    except Exception as tag_read_ex:
-        LOGGER.warn("Advertencia al leer enclavamientos de campo (modo simulado activo): {}".format(str(tag_read_ex)))
-
-    try:
-        # D. Escritura de Consigna en PLC (writeBlocking agrupado)
-        tag_sp = tag_prefix + "ConsignaCaudal"
-        write_results = system.tag.writeBlocking([tag_sp], [safe_sp])
-        
-        # E. Registro Inmutable de Auditoria en Base de Datos
-        audit_desc = u"Ajuste consigna caudal {} -> {:.2f} m3/h".format(pump_id, safe_sp)
-        audit_sql = """
-            INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        """
-        system.db.runPrepUpdate(audit_sql, [str(pump_id), audit_desc, user_str], database=DEFAULT_DB_CONNECTION)
-        
-        # F. Retorno Exitoso Estructurado
-        LOGGER.info("Consigna aplicada exitosamente a '{}': {} m3/h".format(pump_id, safe_sp))
-        return (True, {
-            "pump_id": str(pump_id),
-            "applied_setpoint_m3h": safe_sp,
-            "user": user_str,
-            "timestamp": system.date.format(system.date.now(), "dd/MM/yyyy HH:mm:ss")
-        })
-        
-    except SQLException as sql_ex:
-        LOGGER.error("Error SQL al auditar maniobra de '{}': {}".format(pump_id, sql_ex.getMessage()), sql_ex)
-        return (False, {"error_code": "DB_AUDIT_ERROR", "user_message": u"Consigna aplicada pero falló el registro de auditoría."})
-        
-    except JavaException as java_ex:
-        LOGGER.error("Error Java en Gateway durante maniobra de '{}': {}".format(pump_id, java_ex.getMessage()), java_ex)
-        return (False, {"error_code": "GATEWAY_ERROR", "user_message": u"Error de comunicación con el Gateway de Ignition."})
-        
-    except Exception as py_ex:
-        LOGGER.error("Excepción inesperada en pump_service: {}".format(str(py_ex)))
-        return (False, {"error_code": "UNEXPECTED_ERROR", "user_message": u"Error interno en el servicio de bombeo."})
+    return _service_instance.apply_flow_setpoint(
+        pump_id=pump_id, 
+        requested_flow_m3h=requested_flow_m3h, 
+        user_roles=user_roles, 
+        execution_context=execution_context
+    )
 ```
 
 ***
