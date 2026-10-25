@@ -1057,33 +1057,40 @@ El principio fundamental de arquitectura en Ignition SCADA es que **la interfaz 
 
 ##### 4.2. Estructura Simple de Componentes (Tarjeta de Mando)
 
-Arrastrar únicamente 3 componentes dentro de `root`:
+Arrastrar 4 componentes dentro de `root`:
 
 ```
 root (Flex Container - column)
  ├── lbl_Titulo (Label: "CONTROL DE CONSIGNA - BOMBA 01")
  ├── num_Consigna (Numeric Entry Field: Entrada de consigna, valor inicial 50.0)
- └── btn_Enviar (Button: "APLICAR CONSIGNA")
+ ├── btn_Enviar (Button: "APLICAR CONSIGNA")
+ └── lbl_Feedback (Label: Mensaje de confirmación / error con texto inicial "")
 ```
+
+> **Nota técnica sobre `system.perspective.sendMessage`:** Esta función solo envía un evento al bus de mensajes de la sesión o página, pero **no dibuja nada en pantalla** a menos que tengas un componente con un *Message Handler* configurado para recibir `"notify_toast"`. Para ver el resultado de forma directa y visual sin necesidad de handlers adicionales, el script del botón actualiza directamente la etiqueta `lbl_Feedback` o la propiedad de la vista.
 
 ##### 4.3. Script del Botón (`onActionPerformed` de 4 Líneas)
 
 1. Clic derecho en `btn_Enviar` -> **Configure Actions...** -> **Events -> onActionPerformed**.
-2. Añadir acción tipo **Script**. El script delega el 100% de la lógica al servicio en `Project Library`:
+2. Añadir acción tipo **Script**. El script delega el 100% al servicio y escribe el resultado directamente en el Label de feedback:
 
 ```python
 sp = self.getSibling("num_Consigna").props.value
 usr = self.session.props.auth.user.userName if self.session.props.auth.authenticated else "operador_planta"
-ok, res = project.equipment.pump_service.set_pump_flow_setpoint("EDAR_BOMBA_01", sp, ["OPERADOR"], {"user": usr})
+ok, res = equipment.pump_service.set_pump_flow_setpoint("EDAR_BOMBA_01", sp, ["OPERADOR"], {"user": usr})
 
-system.perspective.sendMessage("notify_toast", {"msg": "Consigna OK: {} m3/h".format(res["applied_setpoint_m3h"]) if ok else res["user_message"]}, scope="page")
+self.getSibling("lbl_Feedback").props.text = u"Consigna OK: {} m³/h".format(res["applied_setpoint_m3h"]) if ok else res["user_message"]
+self.getSibling("lbl_Feedback").props.style.color = "#27ae60" if ok else "#e74c3c"
 ```
 
 ##### 4.4. Verificación Rápida en Modo Preview
 
 1. Activar el **Preview Mode** (`F5` en el Designer).
-2. Introducir `60.0` y pulsar **APLICAR CONSIGNA** $\rightarrow$ El servicio valida límites, enclavamientos y registra la auditoría en BD sin que la interfaz tenga que preocuparse por conexiones ni excepciones.
-3. Introducir `200.0` $\rightarrow$ El backend rechaza la maniobra de forma instantánea y devuelve el mensaje de error controlado al operador.
+2. Introducir `60.0` y pulsar **APLICAR CONSIGNA**:
+   * La etiqueta `lbl_Feedback` se actualiza inmediatamente en color verde: `Consigna OK: 60.0 m³/h`.
+   * El servicio valida límites, enclavamientos y registra la auditoría en la tabla `ins_Registre_Actuacions` de BD.
+3. Introducir `200.0` (fuera del rango de 10 a 120 m³/h):
+   * La etiqueta se actualiza de inmediato en color rojo con el mensaje controlado: `Consigna excede la capacidad máxima de la bomba (120.0 m³/h)`.
 
 ***
 
