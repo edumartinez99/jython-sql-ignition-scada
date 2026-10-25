@@ -131,22 +131,22 @@ flowchart TD
 
 ***
 
-### 3. Laboratorio 10.1: Suite de Testing Automatizado en Script Console
+### 3. Laboratorio 10.1: Testing Funcional Avanzado en Ecosistemas Ignition SCADA (Mocks de Tags y Datasets)
 
 #### Objetivos
 
-* Construir una clase runner de pruebas unitarias en Jython (`SCADATestSuite`) dentro de la Script Console que permita registrar y evaluar aserciones automáticas (`assert_equal`, `assert_true`, `assert_false`).
-* Diseñar una batería de tests completa que someta una función crítica de supervisión industrial ante casos nominales, tolerancias límite, producción cero, valores `None` y escenarios de inconsistencia física.
-* Generar un informe consolidado de aseguramiento de calidad con el recuento de verificaciones superadas y el detalle de discrepancias antes de publicar la lógica en el Gateway.
+* Construir un framework de pruebas unitarias profesional (`SCADAFunctionalTestSuite`) adaptado al ecosistema nativo de Ignition 8.1.
+* Aprender a simular (*Mocking*) el comportamiento de componentes de campo sin depender de PLCs físicos ni bases de datos en caliente: simulación de objetos `QualifiedValue` de `system.tag.readBlocking` (con códigos de calidad reales como `Good`, `Bad_NotFound`, `Bad_CommunicationFailure`) y simulación de `Dataset` de Named Queries (`system.dataset.toDataSet`).
+* Probar de forma determinista la lógica de seguridad y cálculo de enclavamientos de una estación de bombeo/reactor antes de su publicación en el Gateway.
 
 #### Resultado esperado
 
-* Script de testing operativo en la Script Console que ejecuta automáticamente un conjunto estructurado de 6 pruebas sobre la lógica de proceso, emitiendo un reporte formateado con el estado de cada test (`PASS` / `FAIL`), el detalle de valores esperados vs. obtenidos y la tasa de éxito global.
+* Suite de pruebas funcional en la Script Console que valida una función crítica de proceso (`project.process.evaluate_safety_and_efficiency`) frente a lecturas de tags simuladas y contratos de Named Query, emitiendo un informe detallado con tiempos de ejecución, aserciones superadas y diagnósticos de calidad industrial.
 
 #### Conexión con el Entorno Real de Planta
 
-* En entornos industriales es habitual que scripts con enclavamientos de seguridad o cálculo de métricas de calidad se modifiquen directamente en caliente en el Designer y se guarden en producción sin validación previa. Si un sensor de campo devuelve una lectura nula o un operario introduce una cantidad incoherente, el script falla y detiene la línea.
-* **Solución práctica:** Implementar una suite de pruebas automatizada ejecutable en un solo clic dentro de la Script Console permite someter cualquier función a decenas de escenarios límite en segundos, certificando su robustez antes del despliegue en producción.
+* En la Sesión 3 vimos aserciones matemáticas básicas sobre funciones aisladas. Sin embargo, en un entorno de producción real, el 90% de los scripts interactúan con **tags de PLC** (que traen valores de calidad, marcas de tiempo y anomalías de red) y con **Datasets de Named Queries** (que pueden venir con esquemas alterados o valores `NULL`).
+* **Evolución:** No podemos forzar un fallo físico en un reactor o detener una línea en planta solo para probar si el script maneja una desconexión OPC-UA o una tensión fuera de límites. En este laboratorio aprendemos a crear un banco de pruebas profesional con *Mocks* nativos de Ignition, permitiendo testear lógica compleja en la Script Console exactamente como responderá en el Gateway.
 
 #### Paso a Paso para la Realización
 
@@ -155,20 +155,41 @@ flowchart TD
 1. En **Ignition Designer**, acceder al menú superior **Tools -> Script Console**.
 2. Limpiar el panel interactivo de pruebas.
 
-**Paso 2: Implementación de la Clase Runner `SCADATestSuite`**
+**Paso 2: Implementación de la Suite de Testing SCADA con Mocks de Tags y Datasets**
 
-Copiar y pegar la siguiente clase runner en el panel interactivo superior de la Script Console:
+Copiar y pegar la siguiente clase runner avanzada en la Script Console:
 
 ```python
 """
-Laboratorio 10.1: Framework de Testing Funcional en Script Console
+Laboratorio 10.1: Suite Avanzada de Testing Funcional para Ecosistemas Ignition
 Autor: Equipo SCADA - Control de Calidad
 """
 
-class SCADATestSuite(object):
+class MockQuality(object):
+    """Emula com.inductiveautomation.ignition.common.model.values.Quality."""
+    def __init__(self, name="Good", is_good=True):
+        self.name = name
+        self._is_good = is_good
+
+    def isGood(self):
+        return self._is_good
+
+    def __str__(self):
+        return self.name
+
+
+class MockQualifiedValue(object):
+    """Emula el objeto QualifiedValue retornado por system.tag.readBlocking."""
+    def __init__(self, value, quality_name="Good", is_good=True):
+        self.value = value
+        self.quality = MockQuality(quality_name, is_good)
+        self.timestamp = system.date.now()
+
+
+class SCADAFunctionalTestSuite(object):
     """
-    Runner ligero de pruebas unitarias y validacion de aserciones para Ignition SCADA.
-    Permite evaluar contratos de datos y logica de negocio en Script Console.
+    Test Runner profesional para scripts de Ignition SCADA.
+    Soporta aserciones de igualdad, condiciones booleanas, rangos y excepciones.
     """
     def __init__(self, suite_name):
         self.suite_name = suite_name
@@ -177,172 +198,239 @@ class SCADATestSuite(object):
         self.failures = []
 
     def assert_equal(self, test_name, actual, expected):
-        """Valida que el resultado obtenido coincida exactamente con el valor esperado."""
         self.tests_run += 1
         if actual == expected:
             self.tests_passed += 1
             print "  [ PASS ] {}".format(test_name)
         else:
-            self.failures.append({
-                "test": test_name,
-                "expected": expected,
-                "actual": actual
-            })
+            self.failures.append({"test": test_name, "expected": expected, "actual": actual})
             print "  [ FAIL ] {}".format(test_name)
 
     def assert_true(self, test_name, condition):
-        """Valida que la condicion booleana sea evaluada como True."""
         self.assert_equal(test_name, bool(condition), True)
 
     def assert_false(self, test_name, condition):
-        """Valida que la condicion booleana sea evaluada como False."""
         self.assert_equal(test_name, bool(condition), False)
 
+    def assert_in_range(self, test_name, value, min_val, max_val):
+        self.tests_run += 1
+        in_range = (value is not None) and (min_val <= value <= max_val)
+        if in_range:
+            self.tests_passed += 1
+            print "  [ PASS ] {} (Valor {} en rango [{}, {}])".format(test_name, value, min_val, max_val)
+        else:
+            self.failures.append({"test": test_name, "expected": "[{}, {}]".format(min_val, max_val), "actual": value})
+            print "  [ FAIL ] {} (Valor {} fuera de rango)".format(test_name, value)
+
     def print_summary(self):
-        """Emite el informe consolidado de ejecucion de la suite de pruebas."""
-        print "\n" + "=" * 75
-        print "INFORME DE TESTING QA: {}".format(self.suite_name)
-        print "Total Ejecutados: {} | Superados: {} | Fallidos: {}".format(
+        print "\n" + "=" * 78
+        print "INFORME DE TESTING INDUSTRIAL QA: {}".format(self.suite_name)
+        print "Total Pruebas: {} | Superadas: {} | Fallidas: {}".format(
             self.tests_run, self.tests_passed, len(self.failures)
         )
-        print "=" * 75
-        
+        print "=" * 78
         if self.failures:
             print "DETALLE DE DISCREPANCIAS ENCONTRADAS:"
             for f in self.failures:
                 print " - Test:     '{}'".format(f["test"])
                 print "   Esperado: {}".format(f["expected"])
                 print "   Obtenido: {}".format(f["actual"])
-            print "\n>>> ATENCION: EXISTEN TESTS NO SUPERADOS. REVISAR LOGICA ANTES DEL DESPLIEGUE <<<"
+            print "\n>>> ATENCIÓN: VERIFICACIÓN RECHAZADA. CORREGIR LÓGICA ANTES DE PUBLICAR EN GATEWAY <<<"
         else:
-            print ">>> RESULTADO: 100% DE PRUEBAS SUPERADAS. CODIGO APTO PARA PRODUCCION <<<"
-        print "=" * 75
+            print ">>> VEREDICTO: 100% DE PRUEBAS SUPERADAS. LÓGICA APTA PARA PRODUCCIÓN SCADA <<<"
+        print "=" * 78
 ```
 
-**Paso 3: Definición de la Función Crítica de Planta a Evaluar**
+**Paso 3: Definición de la Lógica de Proceso Industrial con Dependencias Inyectables**
 
-Añadir a continuación en la consola la función que clasifica la calidad de un lote de fabricación y calcula el ratio de rechazo (_Scrap Rate_):
+Añadir a continuación la función que evalúa la telemetría de una estación de bombeo y verifica los contratos de datos. Observa cómo desacopla la adquisición (permitiendo inyectar *Mocks* en pruebas y tags reales en producción):
 
 ```python
-def evaluate_batch_quality_and_limits(total_units, scrap_units, max_scrap_allowed_pct=3.0):
+def evaluate_pump_station_safety(tag_reader_fn, pump_id, min_suction_pressure=1.2, max_motor_temp=85.0):
     """
-    Evalua el estado de calidad de un lote de produccion industrial.
+    Evalua los permisivos de arranque y seguridad termica de un grupo de bombeo.
     
     Args:
-        total_units (int|float|None): Total de unidades producidas (buenas + scrap).
-        scrap_units (int|float|None): Unidades defectuosas / mermas.
-        max_scrap_allowed_pct (float): Umbral maximo admisible de rechazo en porcentaje.
+        tag_reader_fn (callable): Funcion lectora que recibe lista de tags y retorna QualifiedValues.
+        pump_id (str): Identificador del equipo (ej. 'BOMBA_01').
+        min_suction_pressure (float): Presion minima requerida en bar contra cavitacion.
+        max_motor_temp (float): Temperatura maxima admisible en devanado (C).
         
     Returns:
-        tuple: (bool is_valid, str quality_status, float scrap_pct)
+        dict: {'can_start': bool, 'status_code': str, 'user_message': unicode, 'metrics': dict}
     """
-    # 1. Validaciones defensivas de nulos (tolerancia a desconexion de sensor)
-    if total_units is None or scrap_units is None:
-        return (False, "ERROR_VALORES_NULOS", 0.0)
+    tag_prefix = "[default]PLANTA_TRATAMIENTO/{}/".format(pump_id)
+    tags_to_read = [
+        tag_prefix + "PresionSuccion",
+        tag_prefix + "TempMotor",
+        tag_prefix + "SetaEmergencia",
+        tag_prefix + "ModoRemoto"
+    ]
+    
+    # 1. Adquisicion de senales (reales o simuladas)
+    q_values = tag_reader_fn(tags_to_read)
+    
+    # 2. Validacion de calidad de enlace OPC-UA / PLC (Fail-Safe)
+    if not q_values or len(q_values) != 4:
+        return {"can_start": False, "status_code": "ERR_COMM_LOST", "user_message": u"Error de comunicación: trama incompleta", "metrics": {}}
+        
+    for q in q_values:
+        if not q.quality.isGood():
+            return {
+                "can_start": False, 
+                "status_code": "ERR_BAD_QUALITY", 
+                "user_message": u"Calidad de sensor degradada ({})".format(q.quality.name),
+                "metrics": {}
+            }
+            
+    val_presion = q_values[0].value
+    val_temp = q_values[1].value
+    val_estop = bool(q_values[2].value)
+    val_remoto = bool(q_values[3].value)
+    
+    # 3. Validacion de tipos y valores nulos
+    if val_presion is None or val_temp is None:
+        return {"can_start": False, "status_code": "ERR_NULL_VALUE", "user_message": u"Valores analógicos nulos detectados", "metrics": {}}
         
     try:
-        tot = float(total_units)
-        scr = float(scrap_units)
+        p_num = float(val_presion)
+        t_num = float(val_temp)
     except (ValueError, TypeError):
-        return (False, "ERROR_TIPO_DATOS", 0.0)
+        return {"can_start": False, "status_code": "ERR_DATA_TYPE", "user_message": u"Lectura analógica no numérica", "metrics": {}}
         
-    # 2. Validaciones de coherencia fisica de planta
-    if tot < 0.0 or scr < 0.0:
-        return (False, "ERROR_VALOR_NEGATIVO", 0.0)
-        
-    if scr > tot:
-        return (False, "ERROR_SCRAP_MAYOR_TOTAL", 0.0)
-        
-    # 3. Caso borde: Produccion cero (evita division por cero en parada de linea)
-    if tot == 0.0:
-        return (True, "SIN_PRODUCCION", 0.0)
-        
-    # 4. Calculo del porcentaje de rechazo
-    scrap_rate = round((scr / tot) * 100.0, 2)
+    metrics = {"suction_pressure_bar": p_num, "motor_temp_c": t_num}
     
-    if scrap_rate <= max_scrap_allowed_pct:
-        status = "CONFORME"
-    else:
-        status = "NO_CONFORME"
+    # 4. Enclavamientos de seguridad física
+    if val_estop:
+        return {"can_start": False, "status_code": "INTERLOCK_ESTOP", "user_message": u"Seta de emergencia accionada", "metrics": metrics}
         
-    return (True, status, scrap_rate)
+    if not val_remoto:
+        return {"can_start": False, "status_code": "INTERLOCK_LOCAL_MODE", "user_message": u"Equipo en conmutador LOCAL manual", "metrics": metrics}
+        
+    if p_num < min_suction_pressure:
+        return {"can_start": False, "status_code": "INTERLOCK_LOW_SUCTION", "user_message": u"Presión de aspiración baja: riesgo de cavitación", "metrics": metrics}
+        
+    if t_num > max_motor_temp:
+        return {"can_start": False, "status_code": "INTERLOCK_HIGH_TEMP", "user_message": u"Disparo térmico por sobretemperatura", "metrics": metrics}
+        
+    return {
+        "can_start": True, 
+        "status_code": "PERMISSIVE_OK", 
+        "user_message": u"Condiciones de arranque conformes", 
+        "metrics": metrics
+    }
 ```
 
-**Paso 4: Ejecución de la Batería de Pruebas de QA (6 Casos Exhaustivos)**
+**Paso 4: Ejecución del Banco de Pruebas de Ecosistema SCADA**
 
-Añadir al script de la consola las aserciones que someten a la función a la matriz de testing:
+Añadir las pruebas con simulaciones de tags (`MockQualifiedValue`) y validación de datasets:
 
 ```python
-suite = SCADATestSuite("Validacion Funcional: Clasificacion de Calidad de Lotes")
+suite = SCADAFunctionalTestSuite("Auditoría de Enclavamientos SCADA y Contratos de Datos")
 
-print "=== EJECUTANDO BATERIA DE ASERCIONES DE QA ==="
+print "=== 1. PRUEBAS DE ENCLAVAMIENTO CON SIMULACIÓN DE TAGS OPC-UA ==="
 
-# 1. Caso Nominal Aceptado (1000 total, 15 scrap -> 1.5% <= 3.0%)
-suite.assert_equal(
-    "Caso Nominal Conforme (1.5% scrap)",
-    evaluate_batch_quality_and_limits(1000, 15, max_scrap_allowed_pct=3.0),
-    (True, "CONFORME", 1.5)
-)
+# Test 1.1: Escenario Nominal Conforme (Presión 2.5 bar, Temp 45.0 °C, Sin Paro, En Remoto)
+def mock_nominal(tags):
+    return [
+        MockQualifiedValue(2.5, "Good", True),
+        MockQualifiedValue(45.0, "Good", True),
+        MockQualifiedValue(False, "Good", True),
+        MockQualifiedValue(True, "Good", True)
+    ]
 
-# 2. Caso Nominal Rechazado (1000 total, 50 scrap -> 5.0% > 3.0%)
-suite.assert_equal(
-    "Caso Nominal No Conforme (5.0% scrap)",
-    evaluate_batch_quality_and_limits(1000, 50, max_scrap_allowed_pct=3.0),
-    (True, "NO_CONFORME", 5.0)
-)
+res1 = evaluate_pump_station_safety(mock_nominal, "BOMBA_01")
+suite.assert_true("Nominal Conforme: Arranque habilitado", res1["can_start"])
+suite.assert_equal("Nominal Conforme: Código", res1["status_code"], "PERMISSIVE_OK")
 
-# 3. Caso Limite Exacto de Tolerancia (1000 total, 30 scrap -> 3.0% == 3.0%)
-suite.assert_equal(
-    "Limite Exacto de Tolerancia (3.0% scrap)",
-    evaluate_batch_quality_and_limits(1000, 30, max_scrap_allowed_pct=3.0),
-    (True, "CONFORME", 3.0)
-)
+# Test 1.2: Fallo de Enlace OPC-UA (Calidad Bad_CommunicationFailure en Sensor de Presión)
+def mock_bad_quality(tags):
+    return [
+        MockQualifiedValue(None, "Bad_CommunicationFailure", False),
+        MockQualifiedValue(45.0, "Good", True),
+        MockQualifiedValue(False, "Good", True),
+        MockQualifiedValue(True, "Good", True)
+    ]
 
-# 4. Caso Borde: Produccion Cero (Evita division por cero)
-suite.assert_equal(
-    "Produccion Cero (0 total, 0 scrap)",
-    evaluate_batch_quality_and_limits(0, 0),
-    (True, "SIN_PRODUCCION", 0.0)
-)
+res2 = evaluate_pump_station_safety(mock_bad_quality, "BOMBA_01")
+suite.assert_false("Fail-Safe ante sensor Bad: Arranque bloqueado", res2["can_start"])
+suite.assert_equal("Código de error por mala calidad", res2["status_code"], "ERR_BAD_QUALITY")
 
-# 5. Caso Defensivo: Parametros Nulos (None procedentes de fallo OPC-UA)
-suite.assert_equal(
-    "Parametro Total Nulo (None)",
-    evaluate_batch_quality_and_limits(None, 10),
-    (False, "ERROR_VALORES_NULOS", 0.0)
-)
+# Test 1.3: Enclavamiento de Seguridad Física (Seta de Emergencia Presionada)
+def mock_estop(tags):
+    return [
+        MockQualifiedValue(2.5, "Good", True),
+        MockQualifiedValue(45.0, "Good", True),
+        MockQualifiedValue(True, "Good", True),   # Seta accionada
+        MockQualifiedValue(True, "Good", True)
+    ]
 
-# 6. Caso de Inconsistencia Fisica: Scrap mayor que produccion total (100 tot, 150 scr)
-suite.assert_equal(
-    "Inconsistencia: Scrap Mayor que Total",
-    evaluate_batch_quality_and_limits(100, 150),
-    (False, "ERROR_SCRAP_MAYOR_TOTAL", 0.0)
-)
+res3 = evaluate_pump_station_safety(mock_estop, "BOMBA_01")
+suite.assert_false("Enclavamiento E-Stop: Bloqueo inmediato", res3["can_start"])
+suite.assert_equal("Código E-Stop", res3["status_code"], "INTERLOCK_ESTOP")
 
-# Imprimir reporte consolidado
+# Test 1.4: Límite Mecánico de Cavitación (Presión 0.8 bar < Umbral 1.2 bar)
+def mock_low_pressure(tags):
+    return [
+        MockQualifiedValue(0.8, "Good", True),
+        MockQualifiedValue(45.0, "Good", True),
+        MockQualifiedValue(False, "Good", True),
+        MockQualifiedValue(True, "Good", True)
+    ]
+
+res4 = evaluate_pump_station_safety(mock_low_pressure, "BOMBA_01")
+suite.assert_false("Cavitación: Bloqueo por baja presión de succión", res4["can_start"])
+suite.assert_equal("Código baja aspiración", res4["status_code"], "INTERLOCK_LOW_SUCTION")
+
+print "\n=== 2. VERIFICACIÓN DE CONTRATOS DE DATOS (DATASETS DE NAMED QUERIES) ==="
+
+# Simulación de un Dataset devuelto por una Named Query analítica
+headers = ["machine_id", "total_batches", "sum_good", "sum_scrap", "scrap_rate_pct"]
+data = [
+    ["EDAR_BOMBA_01", 12, 14500, 150, 1.02],
+    ["EDAR_BOMBA_02", 8, 9200, 310, 3.26]
+]
+mock_dataset = system.dataset.toDataSet(headers, data)
+
+# Test 2.1: Verificación de Integridad de Columnas Requeridas por la UI
+required_columns = set(["machine_id", "sum_good", "sum_scrap", "scrap_rate_pct"])
+actual_columns = set(mock_dataset.getColumnNames())
+suite.assert_true("Contrato SQL: Columnas requeridas presentes", required_columns.issubset(actual_columns))
+
+# Test 2.2: Verificación de Rangos de Calidad en Telemetría
+rate_bomba_1 = mock_dataset.getValueAt(0, "scrap_rate_pct")
+suite.assert_in_range("Rango Scrap Bomba 01 dentro de tolerancia", rate_bomba_1, 0.0, 3.0)
+
+# Imprimir informe final consolidado
 suite.print_summary()
 ```
 
-**Paso 5: Ejecución y Validación del Reporte**
+**Paso 5: Ejecución y Validación en la Script Console**
 
 1. Pulsar **Execute** en la Script Console (o `Ctrl+Enter`).
 2. **Salida esperada en la consola:**
 
 ```
-=== EJECUTANDO BATERIA DE ASERCIONES DE QA ===
-  [ PASS ] Caso Nominal Conforme (1.5% scrap)
-  [ PASS ] Caso Nominal No Conforme (5.0% scrap)
-  [ PASS ] Limite Exacto de Tolerancia (3.0% scrap)
-  [ PASS ] Produccion Cero (0 total, 0 scrap)
-  [ PASS ] Parametro Total Nulo (None)
-  [ PASS ] Inconsistencia: Scrap Mayor que Total
+=== 1. PRUEBAS DE ENCLAVAMIENTO CON SIMULACIÓN DE TAGS OPC-UA ===
+  [ PASS ] Nominal Conforme: Arranque habilitado
+  [ PASS ] Nominal Conforme: Código
+  [ PASS ] Fail-Safe ante sensor Bad: Arranque bloqueado
+  [ PASS ] Código de error por mala calidad
+  [ PASS ] Enclavamiento E-Stop: Bloqueo inmediato
+  [ PASS ] Código E-Stop
+  [ PASS ] Cavitación: Bloqueo por baja presión de succión
+  [ PASS ] Código baja aspiración
 
-===========================================================================
-INFORME DE TESTING QA: Validacion Funcional: Clasificacion de Calidad de Lotes
-Total Ejecutados: 6 | Superados: 6 | Fallidos: 0
-===========================================================================
->>> RESULTADO: 100% DE PRUEBAS SUPERADAS. CODIGO APTO PARA PRODUCCION <<<
-===========================================================================
+=== 2. VERIFICACIÓN DE CONTRATOS DE DATOS (DATASETS DE NAMED QUERIES) ===
+  [ PASS ] Contrato SQL: Columnas requeridas presentes
+  [ PASS ] Rango Scrap Bomba 01 dentro de tolerancia (Valor 1.02 en rango [0.0, 3.0])
+
+==============================================================================
+INFORME DE TESTING INDUSTRIAL QA: Auditoría de Enclavamientos SCADA y Contratos de Datos
+Total Pruebas: 10 | Superadas: 10 | Fallidas: 0
+==============================================================================
+>>> VEREDICTO: 100% DE PRUEBAS SUPERADAS. LÓGICA APTA PARA PRODUCCIÓN SCADA <<<
+==============================================================================
 ```
 
 ***
@@ -870,32 +958,152 @@ print " - Mensaje UI:    ", res3.get("user_message")
 
 ***
 
-#### 4. Consumo Desacoplado del Servicio desde Perspective UI
+#### 4. Consumo Desacoplado del Servicio desde Perspective UI (Paso a Paso en el Designer)
 
-En una vista de supervisión de Perspective, el botón de confirmación de consigna (`btn_AplicarConsigna -> onActionPerformed`) contiene únicamente **3-4 líneas de código**, delegando toda la lógica al backend:
+A continuación se detalla cómo construir en Ignition Designer la interfaz gráfica operativa que consume este servicio, garantizando que el diseño sea reactivo, visualmente limpio y totalmente desacoplado del backend.
+
+##### 4.1. Creación de la Vista de Supervisión en Perspective
+
+1. En el **Project Browser**, navegar a **Perspective -> Views**.
+2. Hacer clic derecho sobre la carpeta `Laboratorios` (o crearla) y seleccionar **New View...**.
+3. Configurar los parámetros de la nueva vista:
+   * **Path:** `Laboratorios/Lab10_2_PumpControl`
+   * **Root Container Type:** Seleccionar **`Flex Container`**.
+   * **Page Title:** `Control y Consignas - Estación de Bombeo`.
+4. Seleccionar el componente `root` de la vista y en el panel de **PROPERTIES** (a la derecha) ajustar:
+   * `direction`: `column`
+   * `justifyContent`: `flex-start`
+   * `alignItems`: `center`
+   * `style.padding`: `20px`
+   * `style.backgroundColor`: `var(--neutral-10, #f8f9fa)`
+
+##### 4.2. Definición de Propiedades `custom` de la Vista
+
+En el panel de propiedades de la vista, añadir en la sección **`custom`** las siguientes propiedades para centralizar la telemetría y el estado del equipo:
+
+* `custom.pumpId`: `"EDAR_BOMBA_01"` (String)
+* `custom.tagBasePath`: `"[default]PLANTA_TRATAMIENTO/EDAR_BOMBA_01/"` (String)
+* `custom.lastStatusMsg`: `""` (String)
+* `custom.isSuccess`: `true` (Boolean)
+
+##### 4.3. Construcción del Panel de Mando (Estructura de Componentes)
+
+Arrastrar dentro de `root` los siguientes contenedores y componentes desde la paleta de Perspective (**Component Palette**):
+
+```
+root (Flex Container - column)
+ └── pnl_CardBomba (Flex Container - column, tarjeta con borde y sombra suave)
+      ├── lbl_Titulo (Label: Encabezado del equipo)
+      ├── pnl_Lecturas (Flex Container - row: Telemetría actual)
+      │    ├── lbl_CaudalActual (Label: Tag de lectura en vivo)
+      │    └── lbl_EstadoRemoto (Label: Indicador de modo Local/Remoto)
+      ├── pnl_AjusteConsigna (Flex Container - row: Selector de nueva consigna)
+      │    ├── lbl_Prompt (Label: "Nueva Consigna:")
+      │    ├── num_ConsignaCaudal (Numeric Entry Field: Entrada de m³/h)
+      │    └── lbl_Unidad (Label: "m³/h")
+      ├── btn_AplicarConsigna (Button: Botón de envío seguro con confirmación)
+      └── lbl_FeedbackOperador (Label: Notificación contextual con cambio de color)
+```
+
+##### 4.4. Configuración y Propiedades de los Componentes
+
+Configurar cada elemento en el panel de propiedades:
+
+| Componente | Nombre | Propiedad | Configuración / Binding en Designer |
+| :--- | :--- | :--- | :--- |
+| **Flex Container** | `pnl_CardBomba` | `style` | `width: 480px`, `backgroundColor: #ffffff`, `borderRadius: 8px`, `padding: 24px`, `boxShadow: 0 4px 12px rgba(0,0,0,0.08)` |
+| **Label** | `lbl_Titulo` | `props.text` | `"GRUPO DE BOMBEO - EDAR_BOMBA_01"` (Estilo: negrita 16px, color `#2c3e50`) |
+| **Label** | `lbl_CaudalActual` | `props.text` | **Tag Binding:** `[default]PLANTA_TRATAMIENTO/EDAR_BOMBA_01/CaudalActual`<br>*(Si no existe el tag, valor fijo simulado: `"Caudal Actual: 68.4 m³/h"`)* |
+| **Numeric Entry** | `num_ConsignaCaudal` | `props.value`<br>`props.format` | **Valor inicial:** `50.0`<br>**Format:** `#,##0.0`<br>**Límites:** `props.spinner.min: 0.0`, `props.spinner.max: 150.0` |
+| **Button** | `btn_AplicarConsigna` | `props.text`<br>`props.style` | **Texto:** `"APLICAR CONSIGNA SEGURA"`<br>**Estilo:** `backgroundColor: #1976d2`, `color: #ffffff`, `fontWeight: bold`, `height: 42px`, `borderRadius: 4px` |
+| **Label** | `lbl_FeedbackOperador`| `props.text`<br>`props.style.color` | **Binding Property a `view.custom.lastStatusMsg`**.<br>Color con Expression Binding: `if({view.custom.isSuccess}, '#27ae60', '#e74c3c')` |
+
+##### 4.5. Implementación del Evento `onActionPerformed` en el Botón
+
+1. Seleccionar el botón `btn_AplicarConsigna`.
+2. En el panel de eventos (icono de rayo o clic derecho -> **Configure Actions...**), seleccionar **Events -> onActionPerformed**.
+3. Añadir una acción de tipo **Script** y pegar el siguiente código:
 
 ```python
-# Evento onActionPerformed en Perspective (UI Limpia y Desacoplada)
-roles = self.session.props.auth.user.roles if self.session.props.auth.authenticated else ["INVITADO"]
-user = self.session.props.auth.user.userName if self.session.props.auth.authenticated else "ANONIMO"
-sp_solicitado = self.getSibling("num_ConsignaCaudal").props.value
+# =============================================================================
+# Evento onActionPerformed: Envío Seguro y Desacoplado a Project Library
+# =============================================================================
 
-# Invocacion del servicio canónico en Project Library
-ok, res = project.equipment.pump_service.set_pump_flow_setpoint(
-    pump_id="EDAR_BOMBA_01",
-    requested_flow_m3h=sp_solicitado,
-    user_roles=roles,
-    execution_context={"user": user, "action": "SET_FLOW_SP"}
+# 1. Extracción segura del contexto del operador autenticado
+if self.session.props.auth.authenticated:
+    user_name = self.session.props.auth.user.userName
+    user_roles = list(self.session.props.auth.user.roles)
+else:
+    # Contexto para pruebas en Designer / Operador de turno local
+    user_name = "operador_designer"
+    user_roles = ["OPERADOR", "MANTENIMIENTO"]
+
+# 2. Obtención de parámetros de la vista
+pump_id = self.view.custom.pumpId
+requested_flow = self.getSibling("pnl_AjusteConsigna").getChild("num_ConsignaCaudal").props.value
+
+context = {
+    "user": user_name,
+    "action": "CAMBIO_CONSIGNA_PERSPECTIVE"
+}
+
+# 3. Invocación de la función canónica de servicio en Project Library
+ok, response = project.equipment.pump_service.set_pump_flow_setpoint(
+    pump_id=pump_id,
+    requested_flow_m3h=requested_flow,
+    user_roles=user_roles,
+    execution_context=context
 )
 
+# 4. Actualización del estado visual y feedback reactivo
+self.view.custom.isSuccess = ok
+
 if ok:
-    # Notificacion visual de exito y refresco de bindings
-    system.perspective.sendMessage("notify_toast", payload={"msg": u"Consigna aplicada con éxito", "type": "success"}, scope="page")
-    system.perspective.sendMessage("refresh_pump_data", payload={}, scope="page")
+    msg_exito = u"Consigna de {:.1f} m³/h aplicada y registrada con éxito".format(response["applied_setpoint_m3h"])
+    self.view.custom.lastStatusMsg = msg_exito
+    # Notificación Toast nativa en la esquina superior del navegador
+    system.perspective.sendMessage(
+        "notify_toast", 
+        payload={"msg": msg_exito, "type": "success"}, 
+        scope="page"
+    )
+    # Refresco reactivo de componentes suscritos a la página
+    system.perspective.sendMessage(
+        "refresh_pump_telemetry", 
+        payload={"pump_id": pump_id}, 
+        scope="page"
+    )
 else:
-    # Mensaje de error seguro hacia el operador
-    system.perspective.sendMessage("notify_toast", payload={"msg": res["user_message"], "type": "error"}, scope="page")
+    msg_error = response.get("user_message", u"Error desconocido en la maniobra")
+    self.view.custom.lastStatusMsg = msg_error
+    system.perspective.sendMessage(
+        "notify_toast", 
+        payload={"msg": msg_error, "type": "error"}, 
+        scope="page"
+    )
 ```
+
+##### 4.6. Configuración del Message Handler para Refresco Asíncrono
+
+Para que la vista actualice la telemetría tras el guardado sin bloquear el hilo web:
+1. En el Project Browser, hacer clic derecho sobre la vista `Lab10_2_PumpControl` y seleccionar **Configure Message Handlers...**.
+2. Añadir un nuevo handler:
+   * **Message Type:** `refresh_pump_telemetry`
+   * **Scope:** Marcar casilla **`Page`**.
+   * **Script:**
+     ```python
+     # Refresca los bindings vinculados a las lecturas del equipo
+     self.getChild("root").getChild("pnl_CardBomba").getChild("pnl_Lecturas").getChild("lbl_CaudalActual").refreshBinding("props.text")
+     ```
+
+##### 4.7. Verificación del Funcionamiento en Modo Interactivo
+
+1. Activar el modo interactivo del Designer (**Preview Mode** o pulsar el icono de reproducción `Play` / `F5`).
+2. Introducir un valor nominal válido (ej. `65.0 m³/h`) y pulsar **APLICAR CONSIGNA SEGURA**:
+   * Verificar que la etiqueta de feedback se vuelve verde con el texto de éxito.
+   * Abrir la base de datos `SANDBOX_DB` y comprobar que la tabla `ins_Registre_Actuacions` tiene la nueva fila de auditoría con el usuario y la fecha actual.
+3. Probar un valor fuera de límites físicos (ej. `180.0 m³/h` o `5.0 m³/h`):
+   * Comprobar que el servicio rechaza la maniobra de forma instantánea y la etiqueta muestra el mensaje en color rojo (`Consigna excede la capacidad máxima de la bomba`), sin lanzar excepciones no controladas a la pantalla.
 
 > **Beneficio de la Arquitectura Canónica:** La vista web de Perspective queda completamente protegida y desacoplada: no contiene consultas SQL, no accede a tags directamente, no sufre bloqueos y delega la seguridad y la persistencia al servicio de backend.
 
