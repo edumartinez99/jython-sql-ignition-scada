@@ -143,11 +143,6 @@ flowchart TD
 
 * Suite de pruebas funcional en la Script Console que valida una función crítica de proceso (`process.evaluate_safety_and_efficiency`) frente a lecturas de tags simuladas y contratos de Named Query, emitiendo un informe detallado con tiempos de ejecución, aserciones superadas y diagnósticos de calidad industrial.
 
-#### Conexión con el Entorno Real de Planta
-
-* En la Sesión 3 vimos aserciones matemáticas básicas sobre funciones aisladas. Sin embargo, en un entorno de producción real, el 90% de los scripts interactúan con **tags de PLC** (que traen valores de calidad, marcas de tiempo y anomalías de red) y con **Datasets de Named Queries** (que pueden venir con esquemas alterados o valores `NULL`).
-* **Evolución:** No podemos forzar un fallo físico en un reactor o detener una línea en planta solo para probar si el script maneja una desconexión OPC-UA o una tensión fuera de límites. En este laboratorio aprendemos a crear un banco de pruebas profesional con *Mocks* nativos de Ignition, permitiendo testear lógica compleja en la Script Console exactamente como responderá en el Gateway.
-
 #### Paso a Paso para la Realización
 
 **Paso 1: Creación de la Función de Enclavamientos en la `Project Library` (`qa.safety`)**
@@ -430,17 +425,6 @@ else:
 print "=" * 78
 ```
 
-3. Pulsar **Execute** (`Ctrl+Enter`). Salida esperada:
-
-```
-==============================================================================
-INFORME DE TESTING INDUSTRIAL QA: Auditoría de Enclavamientos SCADA y Contratos de Datos
-Total Pruebas: 8 | Superadas: 8 | Fallidas: 0
-==============================================================================
->>> VEREDICTO: 100% DE PRUEBAS SUPERADAS. LÓGICA APTA PARA PRODUCCIÓN SCADA <<<
-==============================================================================
-```
-
 **Paso 4: Automatización 24/7 con Gateway Scheduled Script (CRON) y Generación de Alertas**
 
 Para asegurar que ninguna actualización futura o cambio de esquemas de base de datos rompa la lógica en caliente, programaremos una ejecución periódica en el Gateway mediante un **Gateway Event Script (Scheduled / CRON)**.
@@ -492,15 +476,6 @@ except Exception as err:
 ```
 
 4. Guardar los cambios con **File -> Save**.
-
-**Paso 5: Verificación de Logs y Diagnóstico en la Interfaz Web del Gateway**
-
-1. Abrir el navegador web y acceder a la página de administración del Gateway (`http://<gateway-ip>:8088`).
-2. En el menú lateral, acceder a **Status -> Diagnostics -> Logs**.
-3. En la caja de filtro de logger, escribir: `SCADA.QA.Monitor`.
-4. Comprobar la aparición de los mensajes automáticos:
-   * Mensaje informativo (`INFO`): *"Verificación QA periódica completada con éxito. [8 de 8 pruebas superadas]"*.
-   * Si intencionadamente alteramos una aserción para simular un fallo en `qa.runner`, verificar cómo el Gateway registra de inmediato un evento de severidad `ERROR` alertando a los operadores y supervisores de mantenimiento.
 
 ***
 
@@ -796,24 +771,6 @@ print " - Codigo de Error: ", res2["error_code"]
 print " - Mensaje Usuario: ", res2["user_message"]
 ```
 
-**Paso 5: Salida Esperada en Consola**
-
-```
-=== VALIDACION LABORATORIO 10.2: PLANTILLA CANONICA DE MODULO ===
-
-1. Caso Nominal (Exito):
- - Estado (success): True
- - Payload Retornado:
-   * resource_id: EDAR_BOMBA_01
-   * result_value: 67.5
-   * timestamp: 25/10/2026 12:30:15
-
-2. Caso de Error Controlado:
- - Estado (success): False
- - Codigo de Error:  INVALID_DATATYPES
- - Mensaje Usuario:  Los valores de entrada deben ser numéricos
-```
-
 **Paso 6: Guía de Aplicación Práctica - Cómo Derivar la Plantilla para Crear un Servicio Real de Planta (`equipment.pump_service`)**
 
 Una plantilla canónica no debe ejecutarse directamente en planta para la lógica de proceso, sino que actúa como el **molde arquitectónico corporativo**. A continuación se muestra cómo un ingeniero de control utiliza la plantilla para construir un servicio real de maniobra y ajuste de consigna para un grupo de bombeo (`equipment.pump_service`).
@@ -823,21 +780,9 @@ Una plantilla canónica no debe ejecutarse directamente en planta para la lógic
 Para crear cualquier servicio nuevo en `Project Library` a partir de `templates.service_template`, se siguen 4 pasos sistemáticos:
 
 1. **Configurar Identidad y Constantes:**
-   * Ajustar el identificador del módulo (`MODULE_NAME = "PumpService"`).
-   * Definir las conexiones JDBC y límites físicos de ingeniería (ej. caudales nominales mín/máx en m³/h, presiones admisibles en bar).
-   * Inicializar el logger contextual específico (`system.util.getLogger("SCADA.Equipment.PumpService")`).
 2. **Definir las Funciones Puras Privadas (`_calculate_...` / `_validate_...`):**
-   * Sustituir el cálculo genérico por el algoritmo de proceso específico (ej. validación física de límites de caudal, rampa de aceleración de variador de frecuencia o cálculo de potencia hidráulica).
-   * Al no tener E/S (sin tags ni BD), estas funciones pueden auditarse al 100% en la Script Console con pruebas unitarias.
 3. **Implementar la Función Pública de Servicio (`set_pump_flow_setpoint`):**
-   * _Aduana de Seguridad RBAC:_ Validar en el servidor que el usuario activo posee roles autorizados (`OPERADOR`, `MANTENIMIENTO` o `INGENIERIA`).
-   * _Validación Defensiva de Entradas:_ Comprobar que el identificador del equipo existe y la consigna es numérica.
-   * _Lectura de Enclavamientos en Bloque:_ Usar `system.tag.readBlocking` para verificar el estado físico del PLC (modo `REMOTO`, sin disparo térmico, sin seta de emergencia).
-   * _Escritura de Consigna Protegida:_ Enviar el valor al PLC mediante `system.tag.writeBlocking`.
-   * _Pista de Auditoría:_ Registrar la maniobra en la base de datos relacional (`ins_Registre_Actuacions`).
-   * _Retorno Estructurado:_ Entregar la tupla `(bool success, dict payload_or_error)` hacia la interfaz de usuario.
-4. **Captura Dual de Excepciones y Logging:**
-   * Interceptar `SQLException`, `JavaException` y `Exception`, traduciendo fallos técnicos en mensajes comprensibles y seguros para el operador sin exponer trazas internas.
+4. **Captura Dual de Excepciones y Logging:**s.
 
 ***
 
@@ -1067,8 +1012,6 @@ root (Flex Container - column)
  └── lbl_Feedback (Label: Mensaje de confirmación / error con texto inicial "")
 ```
 
-> **Nota técnica sobre `system.perspective.sendMessage`:** Esta función solo envía un evento al bus de mensajes de la sesión o página, pero **no dibuja nada en pantalla** a menos que tengas un componente con un *Message Handler* configurado para recibir `"notify_toast"`. Para ver el resultado de forma directa y visual sin necesidad de handlers adicionales, el script del botón actualiza directamente la etiqueta `lbl_Feedback` o la propiedad de la vista.
-
 ##### 4.3. Script del Botón (`onActionPerformed` de 4 Líneas)
 
 1. Clic derecho en `btn_Enviar` -> **Configure Actions...** -> **Events -> onActionPerformed**.
@@ -1082,22 +1025,13 @@ ok, res = equipment.pump_service.set_pump_flow_setpoint("EDAR_BOMBA_01", sp, ["O
 self.getSibling("lbl_Feedback").props.text = u"Consigna OK: {} m³/h".format(res["applied_setpoint_m3h"]) if ok else res["user_message"]
 ```
 
-##### 4.4. Verificación Rápida en Modo Preview
-
-1. Activar el **Preview Mode** (`F5` en el Designer).
-2. Introducir `60.0` y pulsar **APLICAR CONSIGNA**:
-   * La etiqueta `lbl_Feedback` se actualiza inmediatamente en color verde: `Consigna OK: 60.0 m³/h`.
-   * El servicio valida límites, enclavamientos y registra la auditoría en la tabla `ins_Registre_Actuacions` de BD.
-3. Introducir `200.0` (fuera del rango de 10 a 120 m³/h):
-   * La etiqueta se actualiza de inmediato en color rojo con el mensaje controlado: `Consigna excede la capacidad máxima de la bomba (120.0 m³/h)`.
-
 ***
 
 ### 6. Presentación del Proyecto Final Integrador (Tema 26 - Enunciado y Rúbrica)
 
 #### Objetivos
 
-* Exponer con exhaustividad el enunciado, los requisitos técnicos funcionales y la arquitectura multicapa del Proyecto Final Integrador que se implementará y defenderá en la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md).
+* Exponer con exhaustividad el enunciado, los requisitos técnicos funcionales y la arquitectura multicapa del Proyecto Final Integrador que se implementará y defenderá en la Sesión 11.
 * Detallar la descomposición de las 6 capas del proyecto: modelo relacional DDL, Named Queries parametrizadas, librerías puras y de orquestación, interfaz reactiva en Perspective, tarea programada desatendida en Gateway y suite de validación funcional en consola.
 * Presentar la rúbrica oficial de evaluación técnica y los criterios de aceptación para la certificación.
 
@@ -1111,7 +1045,7 @@ self.getSibling("lbl_Feedback").props.text = u"Consigna OK: {} m³/h".format(res
 
 **2. Arquitectura Multicapa del Proyecto Final (Las 6 Capas de la Sesión 11)**
 
-El proyecto integrador se articula a través de 6 capas estrictamente desacopladas que los alumnos construirán de extremo a extremo en la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md):
+El proyecto integrador se articula a través de 6 capas estrictamente desacopladas que los alumnos construirán de extremo a extremo en la Sesión 11:
 
 * **Capa 1: Persistencia Relacional y Modelo de Datos (SQL DDL)**
   * _Tabla maestra `plant_machines`:_ Catálogo de equipos, líneas asignadas (`line_name`) y tiempo de ciclo ideal nominal en segundos (`ideal_cycle_time_sec`).
@@ -1183,28 +1117,6 @@ flowchart TD
     TestSuite --> PureLogic
 ```
 
-**3. Rúbrica Oficial de Evaluación Técnica (Matriz de Calificación)**
-
-El proyecto final de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md) será evaluado de acuerdo con la siguiente matriz técnica objetiva:
-
-| Criterio de Evaluación                |   Peso  | Requisitos Técnicos Exigidos                                                                                                                                                                        |
-| ------------------------------------- | :-----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1. Ciberseguridad y RBAC**          | **20%** | Ausencia total de concatenación en SQL (0 vulnerabilidades SQLi); validación imperativa de roles (RBAC) en la capa de servicio de backend en servidor y no solo en botones visuales.                |
-| **2. Rendimiento y No-Bloqueo de UI** | **20%** | Cero lecturas unitarias de tags en bucles (agrupación en `system.tag.readBlocking`); Script Transforms livianos sin llamadas JDBC ni I/O pesada; actualización asíncrona mediante Message Handlers. |
-| **3. Arquitectura y Modularidad**     | **20%** | Aislamiento estricto entre funciones puras de cálculo (`oee.calculations`) y funciones de servicio de orquestación; reutilización de la plantilla canónica desarrollada en la Sesión 10.    |
-| **4. Robustez y Tolerancia a Fallos** | **15%** | Captura dual sistemática (`Exception` + `JavaException` / `Throwable`); manejo defensivo de valores `None` e inputs incoherentes; diseño estrictamente idempotente en tareas desatendidas.          |
-| **5. Calidad de Código y Estándares** | **15%** | Cumplimiento de la guía de estilo PEP 8 adaptada a Jython; docstrings completos con unidades físicas en argumentos; nombres semánticos de variables y constantes en `UPPER_SNAKE_CASE`.             |
-| **6. Testing Funcional (QA)**         | **10%** | Batería de pruebas unitarias automatizada en la Script Console que valide casos nominales, casos límite (división por cero) y casos nulos con un 100% de aserciones aprobadas (`[ PASS ]`).         |
-
-**4. Checklist de Preparación del Alumno para la Sesión 11**
-
-Antes de iniciar la jornada de trabajo de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md), cada participante debe comprobar:
-
-* [x] Disponer de acceso operativo a **Ignition Designer** conectado a la base de datos `DB_Admin`.
-* [x] Tener probada y comprendida la clase `SCADATestSuite` implementada en el [Laboratorio 10.1](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-10.md#3-laboratorio-101-suite-de-testing-automatizado-en-script-console).
-* [x] Disponer del módulo canónico `templates.service_template` implementado en el [Laboratorio 10.2](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-10.md#5-laboratorio-102-implementacion-de-plantilla-canonica-de-modulo-para-project-library) como base para la lógica de orquestación.
-* [x] Haber revisado los fundamentos matemáticos de los factores del OEE (Disponibilidad, Rendimiento y Calidad).
-
 #### Resultado esperado
 
 * Todos los alumnos comprenden en detalle el alcance del proyecto integrador, la arquitectura multicapa requerida y los criterios que se evaluarán en la sesión final.
@@ -1221,16 +1133,8 @@ Antes de iniciar la jornada de trabajo de la [Sesión 11](file:///mnt/c/repos/jy
 
 #### Contenidos
 
-* **Pregunta 1: ¿Por qué en sistemas SCADA con Jython 2.7 es indispensable diseñar pruebas unitarias que evalúen entradas `None`?**
-  * _Respuesta técnica esperada:_ Debido a que Jython es un lenguaje de tipado dinámico y en planta la instrumentación o los enlaces OPC-UA sufren caídas de comunicación devolviendo calidades malas o valores nulos. Si el script intenta operar matemáticamente con un `None` sin validación previa, lanzará un `TypeError` no controlado que detendrá la ejecución del proceso en caliente.
-* **Pregunta 2: ¿Qué riesgo presenta ejecutar un script que funciona en la Script Console directamente como un Gateway Scheduled Script?**
-  * _Respuesta técnica esperada:_ La Script Console se ejecuta en el Designer Scope local con contexto visual, mientras que Gateway Scope carece de interfaz de usuario, no dispone de variables de sesión (`session`), no soporta funciones gráficas (`system.gui.*`) y descarta las sentencias `print`. Si el script tiene acoplamientos con dichos elementos, fallará en producción.
-* **Pregunta 3: En la guía de estilo PEP 8 para Ignition, ¿cuál es la convención para funciones, constantes y Named Queries?**
-  * _Respuesta técnica esperada:_ Las funciones y variables locales deben usar `snake_case` (ej. `calculate_oee`), las constantes de módulo deben usar `UPPER_SNAKE_CASE` (ej. `DEFAULT_TIMEOUT_MS`) y las Named Queries y UDTs deben organizarse jerárquicamente en `PascalCase` (ej. `Production/GetShiftSummary`).
-* **Pregunta 4: ¿Por qué el patrón `except: pass` está terminantemente prohibido en software de automatización industrial?**
-  * _Respuesta técnica esperada:_ Porque silencia cualquier anomalía física o informática (errores de sintaxis, fallos de conexión SQL, desconexión de PLCs o violaciones de memoria), impidiendo el diagnóstico, ocultando situaciones de peligro en planta y dejando el sistema en un estado indeterminado.
-* **Pregunta 5: ¿Cuáles son las 6 capas que integran la arquitectura del Proyecto Final Integrador de la Sesión 11?**
-  * _Respuesta técnica esperada:_ Capa 1: Persistencia Relacional (SQL DDL), Capa 2: Acceso a Datos (Named Queries), Capa 3: Lógica de Negocio (`Project Library`: cálculos puros y orquestación), Capa 4: Presentación (Perspective UI), Capa 5: Automatización Desatendida (Gateway Scheduler CRON idempotente) y Capa 6: Calidad de Software (QA Test Runner en Script Console).
+* [Cuestionario Sesión 9](https://docs.google.com/forms/d/e/1FAIpQLSdtMBFE9rLb2yIB6MNocltL3EUgEyukJAPsC117tIaVUid-Hw/viewform?usp=header)
+* [Feedback Sesión 9](https://imagina-formacion.typeform.com/to/LQzhO2AR)
 
 #### Resultado esperado
 
@@ -1244,13 +1148,13 @@ Antes de iniciar la jornada de trabajo de la [Sesión 11](file:///mnt/c/repos/jy
 
 * Revisar individualmente la suite de pruebas y la plantilla canónica de módulo implementadas por cada alumno.
 * Resolver dudas sobre el enunciado y arquitectura del Proyecto Final Integrador.
-* Coordinar la dinámica de trabajo de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md) (Cierre del Curso).
+* Coordinar la dinámica de trabajo de la Sesión 11 (Cierre del Curso).
 
 #### Contenidos
 
 * Rondas de revisión individual del código en la Script Console y en `Project Library`.
 * Validación del acceso a los esquemas de base de datos y recursos necesarios para el proyecto final.
-* Avance de la [Sesión 11](file:///mnt/c/repos/jython-sql-ignition-scada/group-1/sesion-11.md): Desarrollo e integración asistida de las 6 capas, defensa técnica individual de proyectos (_Code Review_ en vivo), test global de certificación y decálogo de consejos de ingeniería para entornos reales.
+* Avance de la Sesión 11: Desarrollo e integración asistida de las 6 capas, defensa técnica individual de proyectos (_Code Review_ en vivo), test global de certificación y decálogo de consejos de ingeniería para entornos reales.
 
 #### Resultado esperado
 
