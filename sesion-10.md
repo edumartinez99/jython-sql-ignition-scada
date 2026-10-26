@@ -1133,8 +1133,8 @@ flowchart TD
 
 #### Contenidos
 
-* [Cuestionario Sesión 9](https://docs.google.com/forms/d/e/1FAIpQLSdtMBFE9rLb2yIB6MNocltL3EUgEyukJAPsC117tIaVUid-Hw/viewform?usp=header)
-* [Feedback Sesión 9](https://imagina-formacion.typeform.com/to/LQzhO2AR)
+* [Cuestionario Sesión 10](https://docs.google.com/forms/d/e/1FAIpQLSdtMBFE9rLb2yIB6MNocltL3EUgEyukJAPsC117tIaVUid-Hw/viewform?usp=header)
+* [Feedback Sesión 10](https://imagina-formacion.typeform.com/to/LQzhO2AR)
 
 #### Resultado esperado
 

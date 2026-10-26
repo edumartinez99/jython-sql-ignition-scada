@@ -158,15 +158,15 @@ flowchart TD
     * *Firma:* `calculate_batch_kpis(target_units, good_units, scrap_units, operating_min, ideal_cycle_sec)`
     * *Reglas:*
       1. Cláusula de guarda: si algún parámetro es `None` o no numérico, retornar `0.0` en todas las métricas.
-      2. Calidad: $\frac{\text{buenas}}{\text{buenas} + \text{scrap}} \times 100$. Si la producción total es 0, retornar `100.0`.
-      3. Rendimiento: $\frac{\text{producción\_real}}{\text{capacidad\_teórica}} \times 100$, donde la capacidad teórica es $\frac{\text{operating\_min} \times 60}{\text{ideal\_cycle\_sec}}$. Acotar a un máximo de `100.0%`.
-      4. OEE: $(\text{Calidad} \times \text{Rendimiento}) / 100$, redondeado a 2 decimales.
+      2. Calidad: `(buenas / (buenas + scrap)) * 100`. Si la producción total es 0, retornar `100.0`.
+      3. Rendimiento: `(producción_real / capacidad_teórica) * 100`, donde la capacidad teórica es `(operating_min * 60) / ideal_cycle_sec`. Acotar a un máximo de `100.0%`.
+      4. OEE: `(Calidad * Rendimiento) / 100`, redondeado a 2 decimales.
       5. Retornar diccionario estructurado con claves `'availability'`, `'performance'`, `'quality'` y `'oee'`.
   * **Función de Orquestación y Servicio Transaccional (`finalize_batch_service`):**
     * *Firma:* `finalize_batch_service(batch_id, equip, good_units, scrap_units, username, user_roles)`
     * *Reglas:*
       1. Aduana RBAC en servidor: validar intersección de `user_roles` con roles autorizados. Si no está autorizado, registrar advertencia en log y retornar `(False, u"Acceso Denegado")`.
-      2. Validaciones defensivas de entrada (lote no vacío, unidades $\ge 0$).
+      2. Validaciones defensivas de entrada (lote no vacío, unidades `>= 0`).
       3. Invocar la Named Query `Production/CloseBatchWithAudit`. Validar que devuelva exactamente 1 fila afectada.
       4. Registrar la pista de auditoría en `ins_Registre_Actuacions` mediante `system.db.runPrepUpdate`.
       5. Envolver en captura dual (`SQLException`, `JavaException`, `Exception`) con log de errores y retorno de mensajes limpios y seguros.
@@ -176,7 +176,7 @@ flowchart TD
 
 #### 4. Directrices para la Capa 4: Presentación e Interfaz en Perspective
 * **Objetivo:** En una vista de Perspective (`Views/Laboratorios/Lab11_OEE_Dashboard`), integrar los componentes visuales:
-  * **Script Transform en Tarjeta de KPIs:** Transform liviano de 3-4 líneas que recibe el payload del lote, delega a `calculate_batch_kpis` y formatea las métricas con colores condicionales (verde $\ge 85\%$, naranja $\ge 65\%$, rojo $< 65\%$). Prohibido hacer consultas o I/O en el transform.
+  * **Script Transform en Tarjeta de KPIs:** Transform liviano de 3-4 líneas que recibe el payload del lote, delega a `calculate_batch_kpis` y formatea las métricas con colores condicionales (verde `>= 85%`, naranja `>= 65%`, rojo `< 65%`). Prohibido hacer consultas o I/O en el transform.
   * **Acción del Botón "Cerrar Lote":** En `onActionPerformed`, extraer `user` y `roles` de `self.session.props.auth`, llamar a `finalize_batch_service` y emitir un mensaje broadcast con `system.perspective.sendMessage("OnBatchStatusChanged", ..., scope="page")` para actualizar la vista de forma reactiva y no bloqueante.
 * **Criterio de Validación:** Comprobar en el navegador que las métricas se muestran correctamente y que la interfaz permanece 100% interactiva al accionar el botón.
 
@@ -207,72 +207,23 @@ flowchart TD
 
 ***
 
-### 4. Laboratorio 11.2: Presentación Técnica de Proyectos y Code Review en Vivo
-
-#### Objetivos
-
-* Exponer la arquitectura implementada por cada alumno ante el grupo, justificando las decisiones de diseño adoptadas.
-* Realizar una sesión de revisión de código por pares (*Peer Code Review*) en vivo, analizando el cumplimiento de los estándares de seguridad, rendimiento, manejo de errores y estilo.
-
-#### Protocolo de Defensa Técnica (10 Minutos por Alumno)
-
-```
- ==============================================================================
-             PROTOCOLO DE DEFENSA TÉCNICA Y LIVE CODE REVIEW
- ==============================================================================
-  [ FASE 1: DEMOSTRACIÓN FUNCIONAL ] (3 min) -> Ejecución de QA Suite en vivo
-  [ FASE 2: AUDITORÍA DE CÓDIGO ]    (5 min) -> Revisión en vivo en el Designer
-  [ FASE 3: DICTAMEN TÉCNICO ]       (2 min) -> Feedback y calificación final
- ==============================================================================
-```
-
-* **Fase 1: Demostración Funcional en Vivo (3 minutos):**
-  * El alumno abre la Script Console y ejecuta su suite de pruebas unitarias demostrando el 100% de aserciones superadas.
-  * Muestra la vista en Perspective con los KPIs calculados y acciona el cierre de lote demostrando el refresco reactivo.
-* **Fase 2: Auditoría de Código por Pares (5 minutos):**
-  * El instructor y el grupo auditan los 4 bloques clave sobre el Designer del alumno:
-    1. *Seguridad (25 pts):* Cero SQL concatenado, uso exclusivo de Named Queries con *Value Parameters* y validación de roles RBAC en servidor.
-    2. *Rendimiento (25 pts):* Transforms puros sin E/S, no-bloqueo de UI y diseño idempotente en la tarea programada.
-    3. *Robustez (25 pts):* Captura dual sistemática (`Exception` + `JavaException`), logging contextual estructurado y erradicación total de `print`.
-    4. *Arquitectura y Estilo (25 pts):* Aislamiento estricto de funciones puras, docstrings canónicos con unidades físicas y adhesión a PEP 8.
-* **Fase 3: Dictamen y Cierre (2 minutos):**
-  * Evaluación de la solución y retroalimentación técnica personalizada.
-
-#### Resultado esperado
-
-* Cada alumno defiende con éxito su proyecto, recibe retroalimentación constructiva y valida sus competencias en arquitectura y desarrollo profesional en Ignition SCADA.
-
-***
-
-### 5. Test Final de Conceptos Global (Evaluación de Certificación)
+### 4. Test Final de Conceptos Global
 
 #### Objetivos
 
 * Evaluar el grado de asimilación global de los contenidos teóricos y prácticos impartidos a lo largo de las 11 sesiones (35 horas).
 * Certificar la adquisición de competencias en Scopes de ejecución, interoperabilidad Jython/Java, transacciones ACID, optimización SQL, seguridad RBAC y diseño modular.
 
-#### Cuestionario Técnico Integrador de Certificación
+#### Cuestionario Técnico Integrador
 
-* **Pregunta 1: En una arquitectura multicapa de Ignition SCADA, ¿por qué está terminantemente prohibido ejecutar consultas SQL o escrituras de tags dentro de un Script Transform de Perspective?**
-  * *Respuesta esperada:* Porque los Script Transforms se ejecutan en el hilo de renderizado visual de la sesión web del cliente. Cualquier operación con latencia de red o bloqueo de E/S retiene el hilo, provocando congelamiento de pantalla (*UI Freezing*) y degradando la experiencia operativa en planta.
-* **Pregunta 2: ¿Cuál es la diferencia fundamental entre capturar `except Exception as ex:` y realizar una captura dual que incluya `from java.lang import Exception as JavaException`?**
-  * *Respuesta esperada:* En Jython, `except Exception:` captura únicamente las excepciones derivadas de la jerarquía estándar de Python. Los errores originados en el motor subyacente de la JVM o en drivers JDBC heredan de `java.lang.Throwable` o `java.lang.Exception`. Si no se capturan explícitamente las excepciones Java, el script abortará silenciosamente o dejará recursos bloqueados en memoria.
-* **Pregunta 3: ¿Por qué una tarea automática en Gateway Scheduler debe diseñarse bajo el principio de idempotencia?**
-  * *Respuesta esperada:* Porque ante microcortes de red, reintentos del planificador o ejecuciones manuales de contingencia por parte del equipo de mantenimiento, una tarea idempotente produce el mismo resultado sin duplicar registros, sin descontar dos veces inventarios y sin corromper los balances de planta.
-* **Pregunta 4: ¿Qué riesgo de ciberseguridad industrial se introduce al condicionar una acción crítica de planta únicamente a la propiedad `props.enabled = hasRole` de un botón en Perspective?**
-  * *Respuesta esperada:* La directiva `props.enabled` es meramente cosmética para el navegador web del cliente. Un usuario puede modificar el DOM o emitir un mensaje WebSocket directamente al Gateway. Si el servicio de backend en `Project Library` no valida imperativamente los roles en el servidor, la maniobra se ejecutará sin autorización.
-* **Pregunta 5: ¿Por qué en consultas analíticas temporales sobre tablas de telemetría indexadas por fecha está prohibido aplicar funciones como `WHERE DATE(fecha) = CURRENT_DATE`?**
-  * *Respuesta esperada:* Porque aplicar una función sobre una columna en la cláusula `WHERE` anula la capacidad del motor SQL de utilizar índices B-Tree (*Consulta No Sargable*), forzando un escaneo secuencial completo de la tabla (*Full Table Scan*) que satura la CPU del servidor de base de datos.
-* **Pregunta 6: ¿Cuál es la ventaja de estructurar la lógica de negocio mediante funciones puras desacopladas de las llamadas a `system.tag.*`?**
-  * *Respuesta esperada:* Permite aislar completamente el algoritmo matemático de la infraestructura física, haciendo posible probar el 100% de la lógica de cálculo (OEE, enclavamientos, balances) en la Script Console mediante pruebas unitarias automáticas sin requerir conexión a PLCs reales.
-
+* [Cuestionario Sesión 10](https://docs.google.com/forms/d/e/1FAIpQLSca5RJfunwZEwJs1myBwAPwzB85mQ5nx7OXkQZW4K2jRmy1Rg/viewform?usp=header)
 #### Resultado esperado
 
 * Certificación individual del aprovechamiento técnico del curso y acreditación de los conocimientos exigidos para el desarrollo profesional en Ignition SCADA.
 
 ***
 
-### 6. Decálogo de Buenas Prácticas y Consejos Finales para Producción Real
+### 5. Decálogo de Buenas Prácticas y Consejos Finales para Producción Real
 
 #### Objetivos
 
@@ -298,19 +249,16 @@ flowchart TD
 
 ***
 
-### 7. Feedback Individual, Balance y Cierre del Curso
+### 6. Feedback Individual, Balance y Cierre del Curso
 
 #### Objetivos
 
-* Comunicar a cada alumno la evaluación de su proyecto final y el balance de su desempeño durante la formación.
 * Resolver dudas avanzadas sobre casos particulares de las plantas de los asistentes.
 * Clausurar formalmente el curso de 35 horas y hacer entrega de las acreditaciones técnicas.
 
 #### Contenidos
 
-* **Rondas de Feedback Individual:** Evaluación pormenorizada de la arquitectura, legibilidad, robustez y resultados obtenidos por cada participante en el Proyecto Final.
-* **Consultas Avanzadas de Planta:** Turno abierto para debatir sobre despliegues en producción, arquitecturas redundantes de Gateway, escalabilidad y migraciones de código heredado (*Legacy*).
-* **Entrega de Materiales y Certificación:** Entrega de las plantillas canónicas, guías de estilo PEP 8 y expedición de los certificados de capacitación técnica en **SQL y Python/Jython para Scripting en Ignition (SCADA)**.
+* [Feedback Sesión 11](https://imagina-formacion.typeform.com/to/LQzhO2AR)
 
 #### Resultado esperado
 
