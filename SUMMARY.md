@@ -18,7 +18,6 @@
 * [Sesión 8](sesion-8.md)
 * [Sesión 9](sesion-9.md)
 * [Sesión 10](sesion-10.md)
+* [Sesión 11](sesion-11.md)
 
 ## Group 1
-
-* [Sesión 11](group-1/sesion-11.md)
