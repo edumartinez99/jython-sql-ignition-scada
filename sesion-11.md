@@ -8,202 +8,459 @@ description: Proyecto Final Integrador, Test Global y Cierre del Curso
 
 #### Objetivos
 
-* Revisar el estado de partida de los entornos individuales y verificar los requisitos del Proyecto Final Integrador.
-* Establecer la dinámica de integración autónoma basada en directrices de ingeniería, presentación técnica y evaluación global del curso.
+* Revisar el estado de partida de los entornos individuales y verificar los recursos base del Proyecto Final Integrador.
+* Establecer la dinámica de construcción autónoma guiada por contratos de ingeniería (implementando **Enfoque A** y **Enfoque B** en cada capa), presentación técnica y evaluación global del curso.
 
 #### Contenidos
 
-* Repaso de las dudas finales sobre testing funcional, plantillas canónicas de módulo (`service_template`) y directrices de estilo PEP 8.
-* Verificación de la disponibilidad del esquema de base de datos en `SANDBOX_DB` y del proveedor de tags `[default]`.
+* Repaso de las dudas finales sobre testing funcional (`SCADATestSuite` y `unittest`), plantillas canónicas de módulo (`templates.service_template`) y directrices de estilo PEP 8.
+* Verificación de la disponibilidad del esquema de base de datos en `SANDBOX_DB`, del proveedor de tags `[default]` y de los usuarios de prueba en el Gateway.
 * Presentación del cronograma de la sesión de cierre:
-  * Bloque 1: Desarrollo e integración asistida de las 6 capas del proyecto (guiada por especificaciones técnicas, sin código prediseñado).
-  * Bloque 2: Batería de validación funcional y certificación QA en Script Console.
-  * Bloque 3: Sesión de defensa técnica y revisión de código por pares (*Live Peer Code Review*).
-  * Bloque 4: Evaluación teórica final de certificación y clausura formal del curso.
+  * **Bloque 1:** Aprovisionamiento de recursos base compartidos (Tags de campo, Script SQL multi-turno y Plantilla `BaseSCADAService`) y desarrollo autónomo de las capas del proyecto.
+  * **Bloque 2:** Batería de validación multi-usuario RBAC y certificación QA en Script Console (Enfoque A y Enfoque B con `unittest`).
+  * **Bloque 3:** Sesión de defensa técnica y revisión de código por pares (*Live Peer Code Review*).
+  * **Bloque 4:** Evaluación teórica final de certificación y clausura formal del curso.
 
 #### Resultado esperado
 
-* Alineación de todos los participantes sobre los entregables y preparación para la fase de construcción guiada y defensa técnica.
+* Alineación de todos los participantes sobre los entregables, los contratos técnicos y la comparativa entre ambos enfoques arquitectónicos.
 
 ***
 
-### 2. Tema 26: Arquitectura e Integración del Proyecto Final Integrador
+### 2. Tema 26: Arquitectura e Integración del Proyecto Final Integrador (Grado Industrial)
 
 #### Objetivos
 
-* Comprender la interacción desacoplada entre las 6 capas arquitectónicas abordadas durante las 35 horas de formación.
-* Justificar técnicamente el flujo de datos: desde el modelo relacional DDL, Named Queries parametrizadas, librerías puras y de orquestación, transforms ligeros en Perspective, automatizaciones desatendidas en Gateway y suite de validación funcional en consola.
-* Consolidar el proyecto como un estándar corporativo de referencia para futuros desarrollos en planta.
+* Comprender la interacción desacoplada entre las **6 capas arquitectónicas + Capa 0 transversal de instrumentación de campo (Tags PLC)** abordadas durante las 35 horas de formación.
+* Justificar técnicamente el flujo de extremo a extremo en un SCADA real: desde la lectura y simulación masiva de tags en tiempo real (`readBlocking` / `writeBlocking`), modelo relacional indexado, Named Queries parametrizadas, servicios transaccionales ACID con doble enfoque (Procedural vs. Herencia POO de Plantilla), seguridad en profundidad RBAC (Validación Jython vs. Security Zones & Security Levels), Perspective reactivo con Message Handlers reales, automatizaciones en Gateway y suite QA con `unittest`.
+* Consolidar el proyecto como un estándar corporativo de referencia para desarrollos en planta.
 
 #### Contenidos
 
-**1. Descomposición Multicapa y Principio de Responsabilidad Única (SRP)**
+**1. De una Prueba de Concepto (PoC) a un SCADA Industrial Real en 6+1 Capas**
 
-* **El peligro de las arquitecturas monolíticas en SCADA:**
-  * En sistemas industriales tradicionales es frecuente encontrar scripts extensos incrustados directamente en botones de interfaz que realizan lecturas de tags en bucle, abren conexiones a base de datos mediante SQL concatenado y actualizan propiedades gráficas en el mismo bloque.
-  * *Consecuencias:* Vulnerabilidades de inyección SQL, bloqueos de interfaz (*UI Freezing*), código imposible de testear de forma aislada y un mantenimiento extremadamente costoso ante cualquier cambio de esquema.
-* **La solución desacoplada en 6 capas:**
-  * **Capa 1 (Persistencia Relacional):** Tablas maestras de equipos (`plant_machines`), lotes transaccionales (`production_batches`) y pistas de auditoría inmutables (`ins_Registre_Actuacions`).
-  * **Capa 2 (Acceso a Datos):** Named Queries parametrizadas mediante *Value Parameters* (lectura analítica agrupada y escrituras atómicas protegidas).
-  * **Capa 3 (Lógica de Negocio en `Project Library`):**
-    * *Funciones Puras de Cálculo:* Motores matemáticos deterministas sin efectos secundarios para Disponibilidad, Rendimiento, Calidad y OEE.
-    * *Funciones de Servicio y Orquestación:* Transaccionalidad ACID, aduana RBAC en servidor, logging contextual estructurado y captura dual de excepciones.
-  * **Capa 4 (Presentación en Perspective):** Script Transforms puros de 3 líneas que delegan el cálculo a la librería y Message Handlers desacoplados para actualización no bloqueante.
-  * **Capa 5 (Automatización Desatendida en Gateway):** Gateway Scheduled Script con expresión CRON y diseño estrictamente idempotente para consolidación automática de fin de turno 24/7.
-  * **Capa 6 (Aseguramiento de Calidad - QA):** Test Runner en Script Console con datos simulados (*Mocks*) y aserciones automáticas para certificar el 100% de los algoritmos antes del despliegue.
+* **El peligro de las arquitecturas monolíticas y de las PoCs desconectadas del campo:**
+  * En sistemas heredados es frecuente encontrar scripts monolíticos incrustados en botones que ejecutan lecturas de tags en bucle, concatenan SQL dinámico y bloquean el hilo gráfico (*UI Freezing*). Por otro lado, muchas pruebas de concepto se limitan a hacer un `UPDATE` en base de datos ignorando el estado real del PLC.
+  * **La arquitectura industrial completa de este Proyecto Final integra:**
+    * **Capa 0 (Transversal — Instrumentación de Campo y Simulador de Tags PLC):** Jerarquía de tags en `[default]PLANTA_PRODUCCION/<EQUIPO>/` con lecturas vivas cambiantes (unidades buenas, rechazo, tiempo operativo, velocidad/caudal, temperatura), consignas y enclavamientos físicos (`ModoRemoto`, `SetaEmergencia`, `FalloTermico`, `OrdenCierrePLC`).
+    * **Capa 1 (Persistencia Relacional e Índices B-Tree):** Catálogo maestro de equipos (`plant_machines`), lotes transaccionales multi-turno (`production_batches`) y pista de auditoría inmutable (`ins_Registre_Actuacions`).
+    * **Capa 2 (Acceso a Datos Parametrizado):** Named Queries con *Value Parameters* para analítica sargable de turno (`GetShiftSummary`), sincronización de telemetría (`SyncBatchTelemetry`) y cierre protegido (`CloseBatchWithAudit`).
+    * **Capa 3 (Lógica de Negocio en `Project Library` — Doble Enfoque):**
+      * *Funciones Puras:* Cálculo determinista de Disponibilidad, Rendimiento, Calidad y OEE (`calculate_batch_kpis`) y evaluación pura de permisivos PLC (`evaluate_plc_interlocks_pure`).
+      * *Orquestación Transaccional:* Implementada bajo **Enfoque A (Procedural)** y **Enfoque B (Heredando de la plantilla `templates.service_template.BaseSCADAService` del Lab 10.2)**, integrando **Transacciones ACID explícitas** (`beginNamedQueryTransaction`, `commit`, `rollback`, `close`), **Handshake bidireccional con el PLC** (acknowledge + carga de siguiente lote + puesta a cero de contadores) y **Notificación asíncrona a ERP/MES** (`invokeAsynchronous` + `httpClient` con fallback Store & Forward).
+    * **Seguridad Industrial RBAC (Transversal Capas 3 y 4 — Doble Enfoque):**
+      * *Enfoque A:* Validación imperativa de lista de roles en el backend Jython (`user_roles`).
+      * *Enfoque B:* Delegación en **Security Zones** (`Zona_Planta_Control`) y **Security Levels** (`Authenticated/Roles/Supervisor`), permisos de escritura en Tags y función `isAuthorized()` en Perspective, verificada con 4 perfiles de usuario.
+    * **Capa 4 (Presentación Reactiva en Perspective — Doble Enfoque y Bus de Mensajes Real):**
+      * Vinculación polimórfica mediante **Indirect Tag Bindings**, KPIs calculados con **Enfoque A (Script Transform ligero)** y **Enfoque B (Perspective Style Classes + Map Transform)**, confirmación de cierre con motivo/firma operativa y **Message Handlers receptores reales (`notify_toast` y `OnBatchStatusChanged`)** configurados en la vista.
+    * **Capa 5 (Automatización Desatendida en Gateway):**
+      * **Scheduled Script CRON (`0 0 6,14,22 * * ?`)** 100% idempotente que sincroniza contadores del PLC y consolida los lotes abiertos al cambio de turno.
+      * **Gateway Tag Change Script** reactivo que vigila `AlarmaScrapAlto` (`> 5%` de merma) y audita el incidente en tiempo real.
+    * **Capa 6 (Aseguramiento de Calidad QA — Doble Enfoque):**
+      * **Enfoque A:** Suite de aserciones directas / `SCADATestSuite` con Mocks de `QualifiedValue`.
+      * **Enfoque B:** Batería automatizada construida con la librería estándar especializada **`unittest` (PyUnit)** de Jython (`unittest.TestCase`, `TextTestRunner`).
 
 ```mermaid
 flowchart TD
-    subgraph Capa1 [Capa 1: Persistencia Relacional - SQL DDL]
+    subgraph Capa0 [Capa 0 Transversal: Tags PLC y Simulador en Vivo]
+        Tags[(Tags: PLANTA_PRODUCCION/EQUIPO/*)]
+        Sim[project.plant.simulator: Batch readBlocking / writeBlocking]
+        Sim <--> Tags
+    end
+
+    subgraph Capa1 [Capa 1: Persistencia Relacional - SQL DDL + Indices]
         DB[(Tablas: plant_machines / production_batches / ins_Registre_Actuacions)]
     end
 
     subgraph Capa2 [Capa 2: Acceso a Datos - Named Queries]
-        NQ_CRUD[CRUD Parametrizado: Value Parameters]
-        NQ_KPI[Consultas Analiticas de Resumen de Turno]
+        NQ_CRUD[CloseBatchWithAudit & SyncBatchTelemetry]
+        NQ_KPI[GetShiftSummary: Analitica Sargable]
     end
 
-    subgraph Capa3 [Capa 3: Logica de Negocio - Project Library]
-        PureLogic[project.plant.service: Funciones Puras OEE / Calidad]
-        ServiceOrch[project.plant.service: Orquestacion + RBAC + Transacciones + Logging]
+    subgraph Capa3 [Capa 3: Project Library - Enfoque A y Enfoque B]
+        Template[templates.service_template: BaseSCADAService Lab 10.2]
+        PureLogic[Funciones Puras: OEE + Enclavamientos PLC]
+        ServiceOrch[project.plant.service: Enfoque A Procedural & Enfoque B POO]
+        RBAC[Seguridad RBAC: Enfoque A Roles & Enfoque B Security Zones/Levels]
+        AsyncERP[invokeAsynchronous: Notificacion HTTP ERP con Fallback]
+        Template --> ServiceOrch
+        PureLogic --> ServiceOrch
+        RBAC --> ServiceOrch
+        ServiceOrch --> AsyncERP
     end
 
     subgraph Capa4 [Capa 4: Presentacion - Perspective UI]
-        UI_Transforms[Script Transforms Livianos de 1-3 lineas]
-        UI_Msg[Message Handlers Desacoplados sin UI Freezing]
+        IndirectTags[Indirect Tag Bindings Dinamicos por Maquina]
+        UI_Transforms[KPIs OEE: Enfoque A Script Transform / Enfoque B Style Classes]
+        UI_Btn[Mando con Motivo de Cierre + sendMessage]
+        UI_Msg[Message Handlers Receptores Reales: notify_toast & OnBatchStatusChanged]
+        UI_Btn --> UI_Msg
     end
 
-    subgraph Capa5 [Capa 5: Automatizacion Desatendida - Gateway Scheduler]
-        CronScript[Scheduled Script CRON: Fin de Turno Idempotente]
+    subgraph Capa5 [Capa 5: Automatizacion Desatendida - Gateway Events]
+        CronScript[Scheduled Script CRON: Cierre de Turno Idempotente]
+        TagChange[Tag Change Script: Vigilancia AlarmaScrapAlto > 5%]
     end
 
-    subgraph Capa6 [Capa 6: Calidad de Software - Testing QA]
-        TestSuite[SCADATestSuite en Script Console: 100% Cobertura de Aserciones]
+    subgraph Capa6 [Capa 6: Certificacion QA en Script Console]
+        QA_A[Enfoque A: SCADATestSuite + Mocks OPC]
+        QA_B[Enfoque B: Libreria Estandar Jython unittest.TestCase]
     end
 
+    Tags <-->|Batch Read/Write + Handshake Reset| ServiceOrch
+    Tags --> IndirectTags
+    Tags --> TagChange
+    TagChange --> DB
     DB <--> NQ_CRUD
     DB <--> NQ_KPI
-    NQ_CRUD <--> ServiceOrch
-    NQ_KPI <--> ServiceOrch
-    ServiceOrch <--> PureLogic
+    NQ_CRUD <-->|Transaccion ACID Commit/Rollback| ServiceOrch
+    NQ_KPI <--> UI_Msg
     CronScript --> ServiceOrch
+    IndirectTags --> UI_Transforms
     UI_Transforms --> PureLogic
-    UI_Msg --> ServiceOrch
-    TestSuite --> ServiceOrch
-    TestSuite --> PureLogic
+    UI_Btn --> ServiceOrch
+    QA_A --> ServiceOrch
+    QA_B --> ServiceOrch
 ```
 
-**2. Matriz de Flujo de Datos y Fronteras de Confianza**
+**2. Matriz de Responsabilidades, Enfoques y Fronteras de Confianza**
 
-| Capa | Responsabilidad Exclusiva | Qué Tiene Estrictamente Prohibido |
-| :--- | :--- | :--- |
-| **Persistencia (SQL)** | Almacenar estado de entidades con integridad referencial. | Ejecutar lógica de presentación o depender de APIs de Ignition. |
-| **Named Queries** | Canalizar consultas parametrizadas tipadas (*Value Parameters*). | Usar concatenación de texto (`+`) o parámetros de sustitución dinámica (`{...}`). |
-| **Project Library (Puras)** | Calcular algoritmos matemáticos (OEE) recibiendo primitivos. | Llamar a `system.tag.*`, `system.db.*` o depender de la UI. |
-| **Project Library (Servicio)** | Validar RBAC, orquestar llamadas a BD/Tags y auditar maniobras. | Manipular componentes visuales directamente (`self.props.*`). |
-| **Perspective UI** | Capturar entradas del operario y renderizar visualmente estados. | Ejecutar consultas SQL directas o cálculos analíticos pesados en transforms. |
-| **Gateway Scheduler** | Ejecutar consolidaciones desatendidas mediante expresiones CRON. | Usar sentencias `print` o asumir la existencia de sesiones web de usuario. |
-| **QA Test Suite** | Validar aserciones y contratos de datos mediante casos en 4 cuadrantes. | Modificar esquemas de producción sin entorno de aislamiento. |
-
-#### Resultado esperado
-
-* Dominio de la arquitectura integral de scripting en Ignition SCADA, demostrando la capacidad de estructurar soluciones robustas, escalables y ciberseguras.
+| Capa | Enfoque A | Enfoque B (Avanzado / Corporativo) | Qué Tiene Estrictamente Prohibido |
+| :--- | :--- | :--- | :--- |
+| **Capa 0 (Tags y Simulador)** | Lectura/escritura por lote desde Script Console. | Simulador modular (`plant.simulator`) con oscilación y alarmas. | Leer o escribir tags dentro de bucles `for` (1 viaje de red por tag). |
+| **Capa 1 y 2 (SQL y Named Queries)** | Tablas relacionales y Named Queries con `:param`. | Índices B-Tree sargables y sincronización previa PLC $\rightarrow$ BD. | Concatenar cadenas SQL (`+`) o usar QueryString `{...}` para valores. |
+| **Capa 3 (`plant.service`)** | Funciones modulares procedurales con `try/except` dual. | Clase `PlantProductionService` heredada de `BaseSCADAService` (Lab 10.2) con transacción ACID explícita. | Llamar a `system.tag.*` o `system.db.*` dentro de las funciones puras de cálculo. |
+| **Seguridad RBAC** | Validación de lista `user_roles` en Jython backend. | Delegación en **Security Zones** + **Security Levels** + `isAuthorized()` + permisos de Tag. | Confiar únicamente en ocultar o deshabilitar el botón en el navegador. |
+| **Capa 4 (Perspective UI)** | Script Transform de 1-3 líneas invocando a la función pura. | **Style Classes** (`OEE/*`) + **Map Transform** numérico + **Indirect Tag Bindings** y **Message Handlers** receptores activos. | Ejecutar consultas SQL, `readBlocking` o llamadas HTTP síncronas en transforms. |
+| **Capa 5 (Gateway Events)** | Scheduled Script CRON idempotente de cierre de turno. | Sincronización previa de tags PLC + **Gateway Tag Change Script** de merma crítica (`> 5%`). | Usar `print` o hacer referencia a propiedades de sesión web (`self.session`). |
+| **Capa 6 (Testing QA)** | Runner propio `SCADATestSuite` con aserciones en consola. | Librería estándar **`unittest` (PyUnit)** de Jython (`unittest.TestCase` + `TextTestRunner`). | Dejar datos corruptos o lotes bloqueados que impidan re-ejecutar el test. |
 
 ***
 
-### 3. Laboratorio 11.1: Desarrollo e Integración Multicapa del Proyecto Final
+### 3. Laboratorio 11.1: Enunciado del Reto — Desarrollo e Integración Multicapa del Proyecto Final
 
-#### Objetivos
+#### Objetivos del Reto
 
-* Construir de forma autónoma las 6 capas del proyecto integrador en el sandbox de Ignition siguiendo **directrices de ingeniería concisas y contratos técnicos**, sin depender de bloques de código prehechos para copiar y pegar.
-* Conectar cada capa mediante contratos de datos verificados: desde el modelo DDL en base de datos hasta el panel de visualización en Perspective y la automatización en Gateway.
-* Superar con éxito la batería de pruebas de QA en la Script Console antes de la presentación técnica.
-
-#### Directrices de Construcción Concisa por Capas
-
-> [!NOTE]
-> En este laboratorio, cada alumno debe escribir e integrar su propio código aplicando los patrones y plantillas asimilados en las sesiones previas (especialmente `service_template` y `SCADATestSuite` de la Sesión 10). A continuación se proporcionan las especificaciones de diseño exactas para cada capa.
+* Construir e integrar de forma autónoma todas las capas del proyecto final en el entorno sandbox partiendo de **3 recursos base compartidos** (el script de aprovisionamiento de Tags, el script SQL poblado de Capa 1 y la plantilla `templates.service_template` del Lab 10.2) y siguiendo las especificaciones técnicas de cada capa.
+* Implementar **ambos enfoques (Enfoque A y Enfoque B)** en el servicio de planta, en el control de acceso RBAC, en la capa visual de Perspective y en la suite de certificación QA.
+* Incorporar los **5 mecanismos de grado industrial** que distinguen un SCADA real de planta de una simple PoC.
 
 ---
 
-#### 1. Directrices para la Capa 1: Persistencia Relacional (SQL DDL)
-* **Objetivo:** En **Tools -> Database Query Browser** (conexión `SANDBOX_DB`), crear las tablas maestras y transaccionales:
-  * Tabla `plant_machines`: Clave primaria `machine_id` (`VARCHAR`), `line_name`, `ideal_cycle_time_sec` (`DOUBLE PRECISION`) e `is_active` (`BOOLEAN`).
-  * Tabla `production_batches`: Clave primaria `batch_id` (`VARCHAR`), clave foránea `machine_id`, `shift_id` (`INT`), `target_units`, `good_units`, `scrap_units`, `operating_time_min` (`DOUBLE PRECISION`), `status` (`VARCHAR`, estados: `'IN_PROGRESS'`, `'CLOSED'`), `created_at`, `closed_at`, `closed_by`.
-  * Tabla `ins_Registre_Actuacions`: Utilizar la tabla de auditoría corporativa existente.
-* **Poblado inicial:** Insertar al menos dos máquinas de prueba y un lote en estado `'IN_PROGRESS'` para habilitar las pruebas de integración.
-* **Criterio de Validación:** Ejecutar `SELECT * FROM production_batches;` y verificar que el registro semilla existe con su máquina relacionada.
+#### 📦 Fase 0: Recursos Base Entregados al Alumno (Ejecutar antes de comenzar el reto)
+
+Para garantizar que todos los participantes trabajen sobre un catálogo de máquinas, lotes multi-turno, jerarquía de tags y plantilla corporativa idénticos, copia y ejecuta estos **3 bloques base** en tu entorno:
+
+##### Recurso Entregado 1: Script de Creación de Tags de Planta en `[default]PLANTA_PRODUCCION`
+Ejecutar en **Tools -> Script Console** para crear las 4 máquinas con sus 15 tags de estado, contadores vivos, consignas y enclavamientos:
+
+```python
+# ==============================================================================
+# RECURSO ENTREGADO 1: APROVISIONAMIENTO DE TAGS DE CAMPO (system.tag.configure)
+# Ejecutar una vez en: Tools -> Script Console
+# ==============================================================================
+tag_provider = "[default]"
+root_folder = "PLANTA_PRODUCCION"
+
+equipos_config = [
+    {"id": "EDAR_BOMBA_01",     "lote_inicial": "LOT-2026-FINAL-01", "target": 5000,  "good": 4850,  "scrap": 65,  "op_min": 420.0, "vel_actual": 68.5, "vel_consigna": 70.0, "ciclo_ideal": 2.5,  "unidad": "m3/h"},
+    {"id": "EDAR_BOMBA_02",     "lote_inicial": "LOT-2026-HIST-04",  "target": 4500,  "good": 4410,  "scrap": 40,  "op_min": 390.0, "vel_actual": 62.0, "vel_consigna": 65.0, "ciclo_ideal": 2.5,  "unidad": "m3/h"},
+    {"id": "EDAR_COMPRESOR_01", "lote_inicial": "LOT-2026-FINAL-03", "target": 1200,  "good": 980,   "scrap": 15,  "op_min": 310.0, "vel_actual": 6.8,  "vel_consigna": 7.0,  "ciclo_ideal": 12.0, "unidad": "bar"},
+    {"id": "LINEA_ENVASADO_01", "lote_inicial": "LOT-2026-FINAL-02", "target": 15000, "good": 11200, "scrap": 180, "op_min": 280.0, "vel_actual": 49.2, "vel_consigna": 50.0, "ciclo_ideal": 1.2,  "unidad": "bot/s"}
+]
+
+equipment_folders = []
+for eq in equipos_config:
+    equipment_folders.append({
+        "name": eq["id"],
+        "tagType": "Folder",
+        "tags": [
+            {"name": "EstadoMarcha",       "tagType": "AtomicTag", "valueType": "Boolean", "value": True},
+            {"name": "ModoRemoto",         "tagType": "AtomicTag", "valueType": "Boolean", "value": True},
+            {"name": "SetaEmergencia",     "tagType": "AtomicTag", "valueType": "Boolean", "value": False},
+            {"name": "FalloTermico",       "tagType": "AtomicTag", "valueType": "Boolean", "value": False},
+            {"name": "AlarmaScrapAlto",    "tagType": "AtomicTag", "valueType": "Boolean", "value": False},
+            {"name": "LoteActivoID",       "tagType": "AtomicTag", "valueType": "String",  "value": eq["lote_inicial"]},
+            {"name": "UnidadesObjetivo",   "tagType": "AtomicTag", "valueType": "Int4",    "value": eq["target"]},
+            {"name": "UnidadesBuenas",     "tagType": "AtomicTag", "valueType": "Int4",    "value": eq["good"]},
+            {"name": "UnidadesScrap",      "tagType": "AtomicTag", "valueType": "Int4",    "value": eq["scrap"]},
+            {"name": "TiempoOperativoMin", "tagType": "AtomicTag", "valueType": "Float4",  "value": eq["op_min"]},
+            {"name": "TiempoCicloIdealSeg","tagType": "AtomicTag", "valueType": "Float4",  "value": eq["ciclo_ideal"]},
+            {"name": "VelocidadActual",    "tagType": "AtomicTag", "valueType": "Float4",  "value": eq["vel_actual"]},
+            {"name": "ConsignaVelocidad",  "tagType": "AtomicTag", "valueType": "Float4",  "value": eq["vel_consigna"]},
+            {"name": "TemperaturaMotorC",  "tagType": "AtomicTag", "valueType": "Float4",  "value": 54.2},
+            {"name": "OrdenCierrePLC",     "tagType": "AtomicTag", "valueType": "Boolean", "value": False}
+        ]
+    })
+
+system.tag.configure(tag_provider, [{"name": root_folder, "tagType": "Folder", "tags": equipment_folders}], "o")
+print "Tags aprovisionados correctamente en [default]PLANTA_PRODUCCION/"
+```
+
+##### Recurso Entregado 2: Script SQL Compartible y Poblado para la Capa 1 (`SANDBOX_DB`)
+Ejecutar en **Tools -> Database Query Browser** (conexión `SANDBOX_DB`):
+
+```sql
+-- =============================================================================
+-- RECURSO ENTREGADO 2: SCRIPT SQL COMPARTIBLE E HIDRATADO (CAPA 1)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS plant_machines (
+    machine_id VARCHAR(50) PRIMARY KEY,
+    line_name VARCHAR(60) NOT NULL,
+    ideal_cycle_time_sec DOUBLE PRECISION NOT NULL,
+    nominal_setpoint DOUBLE PRECISION NOT NULL DEFAULT 50.0,
+    engineering_unit VARCHAR(20) NOT NULL DEFAULT 'u/h',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+ALTER TABLE plant_machines ADD COLUMN IF NOT EXISTS nominal_setpoint DOUBLE PRECISION NOT NULL DEFAULT 50.0;
+ALTER TABLE plant_machines ADD COLUMN IF NOT EXISTS engineering_unit VARCHAR(20) NOT NULL DEFAULT 'u/h';
+
+CREATE TABLE IF NOT EXISTS production_batches (
+    batch_id VARCHAR(50) PRIMARY KEY,
+    machine_id VARCHAR(50) NOT NULL REFERENCES plant_machines(machine_id),
+    shift_id INT NOT NULL CHECK (shift_id IN (1, 2, 3)),
+    target_units INT NOT NULL,
+    good_units INT NOT NULL DEFAULT 0,
+    scrap_units INT NOT NULL DEFAULT 0,
+    operating_time_min DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    status VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    closed_at TIMESTAMP NULL,
+    closed_by VARCHAR(100) NULL
+);
+
+CREATE TABLE IF NOT EXISTS ins_Registre_Actuacions (
+    id SERIAL PRIMARY KEY,
+    Equip VARCHAR(60) NOT NULL,
+    Descripcio TEXT NOT NULL,
+    Usuari VARCHAR(80) NOT NULL,
+    DataHora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_batches_shift_created ON production_batches (shift_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_batches_status_created ON production_batches (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_equip_datahora ON ins_Registre_Actuacions (Equip, DataHora DESC);
+
+INSERT INTO plant_machines (machine_id, line_name, ideal_cycle_time_sec, nominal_setpoint, engineering_unit, is_active)
+VALUES 
+    ('EDAR_BOMBA_01',      'LINEA_TRACTAMENT_AIGUA',  2.5,  70.0,  'm3/h',  TRUE),
+    ('EDAR_BOMBA_02',      'LINEA_TRACTAMENT_AIGUA',  2.5,  65.0,  'm3/h',  TRUE),
+    ('EDAR_COMPRESOR_01',  'LINEA_GENERACIO_AIRE',   12.0,   7.0,  'bar',   TRUE),
+    ('DECANTADOR_01',      'LINEA_DECANTACIO_FANGS', 15.0,  25.0,  'm3/h',  TRUE),
+    ('LINEA_ENVASADO_01',  'LINEA_ENVASAT_PET',       1.2,  50.0,  'bot/s', TRUE),
+    ('LINEA_ENVASADO_02',  'LINEA_ENVASAT_VIDRE',     1.5,  40.0,  'bot/s', FALSE)
+ON CONFLICT (machine_id) DO UPDATE SET
+    line_name = EXCLUDED.line_name, ideal_cycle_time_sec = EXCLUDED.ideal_cycle_time_sec,
+    nominal_setpoint = EXCLUDED.nominal_setpoint, engineering_unit = EXCLUDED.engineering_unit, is_active = EXCLUDED.is_active;
+
+INSERT INTO production_batches (batch_id, machine_id, shift_id, target_units, good_units, scrap_units, operating_time_min, status, created_at, closed_at, closed_by)
+VALUES
+    ('LOT-2026-HIST-01',  'EDAR_BOMBA_01',     1, 5000,  4910,  45, 435.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '6 hours',  CURRENT_TIMESTAMP - INTERVAL '2 hours', 'laura.vidal'),
+    ('LOT-2026-HIST-02',  'EDAR_BOMBA_02',     1, 4500,  4380,  95, 410.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '5 hours',  CURRENT_TIMESTAMP - INTERVAL '1 hour',  'laura.vidal'),
+    ('LOT-2026-HIST-03',  'LINEA_ENVASADO_01', 1, 15000, 14650, 210, 395.0, 'CLOSED',     CURRENT_TIMESTAMP - INTERVAL '5 hours',  CURRENT_TIMESTAMP - INTERVAL '1 hour',  'marti.sanchez'),
+    ('LOT-2026-HIST-04',  'EDAR_COMPRESOR_01', 1, 1200,  1150,  18, 380.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '4 hours',  CURRENT_TIMESTAMP - INTERVAL '30 minutes', 'laura.vidal'),
+    ('LOT-2026-HIST-05',  'EDAR_BOMBA_01',     2, 5000,  4720, 130, 405.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '14 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours', 'marti.sanchez'),
+    ('LOT-2026-HIST-06',  'LINEA_ENVASADO_01', 2, 15000, 14100, 340, 385.0, 'CLOSED',     CURRENT_TIMESTAMP - INTERVAL '14 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours', 'GATEWAY_CRON_AUTO'),
+    ('LOT-2026-HIST-07',  'DECANTADOR_01',     2, 900,    860,  12, 360.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '13 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours', 'laura.vidal'),
+    ('LOT-2026-HIST-08',  'EDAR_BOMBA_02',     3, 4500,  4290, 110, 400.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '20 hours', CURRENT_TIMESTAMP - INTERVAL '15 hours', 'GATEWAY_CRON_AUTO'),
+    ('LOT-2026-HIST-09',  'EDAR_COMPRESOR_01', 3, 1200,  1110,  25, 370.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '20 hours', CURRENT_TIMESTAMP - INTERVAL '15 hours', 'GATEWAY_CRON_AUTO'),
+    ('LOT-2026-FINAL-01', 'EDAR_BOMBA_01',     1, 5000,  4850,  65, 420.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '30 minutes', NULL, NULL),
+    ('LOT-2026-FINAL-02', 'LINEA_ENVASADO_01', 1, 15000, 11200, 180, 280.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '25 minutes', NULL, NULL),
+    ('LOT-2026-FINAL-03', 'EDAR_COMPRESOR_01', 1, 1200,   980,  15, 310.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '20 minutes', NULL, NULL)
+ON CONFLICT (batch_id) DO UPDATE SET
+    good_units = EXCLUDED.good_units, scrap_units = EXCLUDED.scrap_units, operating_time_min = EXCLUDED.operating_time_min,
+    status = EXCLUDED.status, created_at = EXCLUDED.created_at, closed_at = EXCLUDED.closed_at, closed_by = EXCLUDED.closed_by;
+```
+
+##### Recurso Entregado 3: Plantilla Canónica `templates.service_template` (Sesión 10 - Lab 10.2)
+Guardar en **Server Scripting -> Project Library** bajo la ruta `templates.service_template`. Tu implementación del **Enfoque B** de la Capa 3 deberá importar y heredar de esta clase `BaseSCADAService`:
+
+```python
+"""
+Modulo: templates.service_template
+Descripcion: Plantilla canonica corporativa (Sesion 10 - Lab 10.2) entregada para el Proyecto Final.
+"""
+from java.lang import Exception as JavaException
+from java.sql import SQLException
+
+DEFAULT_DB_CONNECTION = "SANDBOX_DB"
+
+
+class BaseSCADAService(object):
+    """Clase base corporativa para herencia POO en servicios de planta (Enfoque B)."""
+
+    def __init__(self, module_name, db_connection=DEFAULT_DB_CONNECTION):
+        self.module_name = module_name
+        self.db_connection = db_connection
+        self.logger = system.util.getLogger("SCADA.{}".format(module_name))
+
+    def check_rbac_roles(self, user_roles, authorized_roles):
+        """RBAC Enfoque A: Interseccion de roles clasicos."""
+        user_set = set(user_roles) if user_roles else set()
+        auth_set = set(authorized_roles) if authorized_roles else set()
+        return bool(user_set.intersection(auth_set))
+
+    def check_rbac_security_levels(self, security_levels, required_levels, security_zones=None, allowed_zones=None):
+        """RBAC Enfoque B: Validacion de Security Levels jerarquicos y Security Zones de Ignition."""
+        lvl_set = set(security_levels) if security_levels else set()
+        req_set = set(required_levels) if required_levels else set()
+        if not bool(lvl_set.intersection(req_set)):
+            return False
+        if allowed_zones:
+            zone_set = set(security_zones) if security_zones else set()
+            return bool(zone_set.intersection(set(allowed_zones)))
+        return True
+
+    def record_audit(self, equipment_id, description, user_str, tx=None):
+        """Registra pista inmutable en ins_Registre_Actuacions (con soporte de transaccion ACID `tx`)."""
+        sql = "INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora) VALUES (?, ?, ?, CURRENT_TIMESTAMP)"
+        if tx is not None:
+            system.db.runPrepUpdate(sql, [str(equipment_id), unicode(description), str(user_str)], tx=tx)
+        else:
+            system.db.runPrepUpdate(sql, [str(equipment_id), unicode(description), str(user_str)], database=self.db_connection)
+
+    def dispatch_acid_transaction(self, action_name, equipment_id, user_str, tx_operation_fn):
+        """Ejecuta `tx_operation_fn(tx_id)` dentro de una transaccion ACID con Commit, Rollback y Close en finally."""
+        project_name = system.util.getProjectName()
+        tx_id = None
+        try:
+            tx_id = system.db.beginNamedQueryTransaction(project=project_name, database=self.db_connection)
+            payload = tx_operation_fn(tx_id)
+            system.db.commitTransaction(tx_id)
+            self.logger.info("[ACID:{}] Commit exitoso en '{}' por '{}'".format(action_name, equipment_id, user_str))
+            return (True, payload)
+        except (SQLException, JavaException, Exception) as ex:
+            if tx_id is not None:
+                system.db.rollbackTransaction(tx_id)
+            self.logger.error("[ACID:{}] Rollback ejecutado en '{}': {}".format(action_name, equipment_id, str(ex)))
+            return (False, {"error_code": "TX_ROLLBACK", "user_message": unicode(str(ex))})
+        finally:
+            if tx_id is not None:
+                try:
+                    system.db.closeTransaction(tx_id)
+                except Exception:
+                    pass
+```
 
 ---
 
-#### 2. Directrices para la Capa 2: Named Queries Parametrizadas
-* **Objetivo:** En el Project Browser, crear en la carpeta `Production/` dos Named Queries con *Value Parameters*:
-  * **`Production/GetShiftSummary`:**
-    * *Tipo:* `Query` (retorna `Dataset`).
-    * *Parámetros:* `shiftId` (`Integer`), `startDate` (`DateTime`), `endDate` (`DateTime`).
-    * *Lógica SQL:* `INNER JOIN` entre lotes y máquinas. Filtrado estricto por turno y rango temporal sargable. Agrupación por máquina. Cálculo de totales (`SUM`) y ratio de rechazo porcentual protegido con `NULLIF` para evitar división por cero.
-  * **`Production/CloseBatchWithAudit`:**
-    * *Tipo:* `Update Query` (retorna entero de filas afectadas).
-    * *Parámetros:* `batchId` (`String`), `goodUnits` (`Integer`), `scrapUnits` (`Integer`), `user` (`String`).
-    * *Lógica SQL:* Sentencia `UPDATE` fijando unidades finales, `status = 'CLOSED'`, `closed_at = CURRENT_TIMESTAMP` y `closed_by = :user`.
-    * *Cláusula Crítica:* Filtrar obligatoriamente por `WHERE batch_id = :batchId AND status = 'IN_PROGRESS'`.
-* **Criterio de Validación:** Probar ambas consultas en la pestaña **Testing** del Designer verificando que se ejecutan sin errores de sintaxis ni violaciones de tipo.
+#### 🛠️ Especificaciones del Reto por Capas (Lo que debe desarrollar e integrar el alumno)
+
+> [!IMPORTANT]
+> A partir de los 3 recursos base anteriores, debes implementar las siguientes capas cumpliendo los contratos de nombres, firmas y parámetros para que la batería de certificación QA valide tu proyecto al 100%.
 
 ---
 
-#### 3. Directrices para la Capa 3: Lógica de Negocio en `Project Library` (`project.plant.service`)
-* **Objetivo:** Crear el script `plant.service` aplicando la estructura de la plantilla canónica (`service_template`):
-  * **Inicialización:** Constantes de módulo, logger contextual SLF4J (`system.util.getLogger("SCADA.PlantService")`), y roles autorizados (`Supervisor`, `Administrator`, `LeadOperator`).
-  * **Función Pura de Cálculo Matemático (`calculate_batch_kpis`):**
-    * *Firma:* `calculate_batch_kpis(target_units, good_units, scrap_units, operating_min, ideal_cycle_sec)`
-    * *Reglas:*
-      1. Cláusula de guarda: si algún parámetro es `None` o no numérico, retornar `0.0` en todas las métricas.
-      2. Calidad: `(buenas / (buenas + scrap)) * 100`. Si la producción total es 0, retornar `100.0`.
-      3. Rendimiento: `(producción_real / capacidad_teórica) * 100`, donde la capacidad teórica es `(operating_min * 60) / ideal_cycle_sec`. Acotar a un máximo de `100.0%`.
-      4. OEE: `(Calidad * Rendimiento) / 100`, redondeado a 2 decimales.
-      5. Retornar diccionario estructurado con claves `'availability'`, `'performance'`, `'quality'` y `'oee'`.
-  * **Función de Orquestación y Servicio Transaccional (`finalize_batch_service`):**
-    * *Firma:* `finalize_batch_service(batch_id, equip, good_units, scrap_units, username, user_roles)`
-    * *Reglas:*
-      1. Aduana RBAC en servidor: validar intersección de `user_roles` con roles autorizados. Si no está autorizado, registrar advertencia en log y retornar `(False, u"Acceso Denegado")`.
-      2. Validaciones defensivas de entrada (lote no vacío, unidades `>= 0`).
-      3. Invocar la Named Query `Production/CloseBatchWithAudit`. Validar que devuelva exactamente 1 fila afectada.
-      4. Registrar la pista de auditoría en `ins_Registre_Actuacions` mediante `system.db.runPrepUpdate`.
-      5. Envolver en captura dual (`SQLException`, `JavaException`, `Exception`) con log de errores y retorno de mensajes limpios y seguros.
-* **Criterio de Validación:** El script debe compilar sin errores en Designer y cumplir con la directriz de cero sentencias `print`.
+#### Reto 0: Simulador de Telemetría Viva en `Project Library` (`project.plant.simulator`)
+* **Objetivo:** Hacer que los tags de las 4 máquinas en `[default]PLANTA_PRODUCCION/<EQUIPO>/` cambien de valor simulando el proceso industrial sin cometer el anti-patrón de E/S en bucle.
+* **Requisitos de Implementación:**
+  1. Crear el script `plant.simulator` con la función `step_simulation_tick(tick_index=1, increment_counters=True)`.
+  2. Leer el estado de las 4 máquinas en **una única llamada `system.tag.readBlocking`**.
+  3. Para cada máquina con `EstadoMarcha == True` y `SetaEmergencia == False`:
+     * Hacer oscilar `VelocidadActual` alrededor de `ConsignaVelocidad` ($\pm 3\%$ con `math.sin` y `random.uniform`) y ajustar `TemperaturaMotorC`.
+     * Incrementar `UnidadesBuenas` (entre $+3$ y $+12$), ocasionalmente `UnidadesScrap` ($+1$), y `TiempoOperativoMin` ($+0.1$).
+     * Evaluar si el porcentaje de rechazo supera el $5.0\%$ y activar el tag booleano `AlarmaScrapAlto`.
+  4. Escribir todos los tags actualizados en **una única llamada `system.tag.writeBlocking`**.
+  5. Crear la función auxiliar `reset_seed_counters_for_qa()` que restaure en `EDAR_BOMBA_01` los valores exactos de semilla (`UnidadesBuenas = 4850`, `UnidadesScrap = 65`, `TiempoOperativoMin = 420.0`, `SetaEmergencia = False`, `ModoRemoto = True`, `LoteActivoID = 'LOT-2026-FINAL-01'`, `OrdenCierrePLC = False`).
 
 ---
 
-#### 4. Directrices para la Capa 4: Presentación e Interfaz en Perspective
-* **Objetivo:** En una vista de Perspective (`Views/Laboratorios/Lab11_OEE_Dashboard`), integrar los componentes visuales:
-  * **Script Transform en Tarjeta de KPIs:** Transform liviano de 3-4 líneas que recibe el payload del lote, delega a `calculate_batch_kpis` y formatea las métricas con colores condicionales (verde `>= 85%`, naranja `>= 65%`, rojo `< 65%`). Prohibido hacer consultas o I/O en el transform.
-  * **Acción del Botón "Cerrar Lote":** En `onActionPerformed`, extraer `user` y `roles` de `self.session.props.auth`, llamar a `finalize_batch_service` y emitir un mensaje broadcast con `system.perspective.sendMessage("OnBatchStatusChanged", ..., scope="page")` para actualizar la vista de forma reactiva y no bloqueante.
-* **Criterio de Validación:** Comprobar en el navegador que las métricas se muestran correctamente y que la interfaz permanece 100% interactiva al accionar el botón.
+#### Reto 1: Capa 2 — Named Queries Parametrizadas (`Production/*`)
+* **Objetivo:** Crear en **Named Queries** (carpeta `Production`, conexión `SANDBOX_DB`) 3 consultas con *Value Parameters*:
+  1. **`Production/GetShiftSummary` (`Query`):**
+     * *Parámetros:* `shiftId` (`Integer`), `startDate` (`DateTime`), `endDate` (`DateTime`).
+     * *Contrato de columnas:* `machine_id`, `line_name`, `engineering_unit`, `total_batches`, `active_batches`, `sum_good`, `sum_scrap`, `scrap_rate_pct` (protegido contra división por cero mediante `NULLIF`). Filtrado sargable sobre `shift_id` y `created_at`.
+  2. **`Production/CloseBatchWithAudit` (`Update Query`):**
+     * *Parámetros:* `batchId` (`String`), `goodUnits` (`Integer`), `scrapUnits` (`Integer`), `user` (`String`).
+     * *Regla de Idempotencia:* Actualizar a `status = 'CLOSED'`, `closed_at = CURRENT_TIMESTAMP` y `closed_by = :user` filtrando obligatoriamente por `WHERE batch_id = :batchId AND status = 'IN_PROGRESS'`.
+  3. **`Production/SyncBatchTelemetry` (`Update Query`):**
+     * *Parámetros:* `batchId` (`String`), `goodUnits` (`Integer`), `scrapUnits` (`Integer`), `operatingMin` (`Float8`).
+     * *Lógica:* Sincroniza en `production_batches` las unidades y minutos leídos de los tags del PLC mientras el lote sigue `'IN_PROGRESS'`.
 
 ---
 
-#### 5. Directrices para la Capa 5: Automatización Desatendida en Gateway (Quartz Scheduler)
-* **Objetivo:** En **Server Scripting -> Gateway Event Scripts -> Scheduled**, configurar la tarea `ConsolidacionFinTurno`:
-  * *Expresión CRON:* `0 0 6,14,22 * * ?` (ejecución automática en los cambios de turno).
-  * *Diseño Idempotente Obligatorio:*
-    1. Ejecutar consulta previa (`system.db.runScalarPrepQuery`) para comprobar si hay lotes en `'IN_PROGRESS'`.
-    2. Si no hay lotes pendientes, registrar aviso informativo en el logger y finalizar la ejecución sin realizar escrituras innecesarias.
-    3. Si existen lotes, ejecutar un `UPDATE` masivo fijando `status = 'CLOSED'` y `closed_by = 'GATEWAY_CRON_AUTO'`.
-    4. Control defensivo contra excepciones para garantizar que el planificador nunca se interrumpa.
-* **Criterio de Validación:** Ejecutar manualmente la función desde Script Console para certificar que la primera vez consolida los lotes y la segunda vez no produce ninguna acción repetida.
+#### Reto 2: Configuración de Seguridad RBAC (Enfoque A y Enfoque B) y Usuarios de Prueba
+* **Objetivo:** Configurar la seguridad para validar el sistema con **4 perfiles de usuario distintos** y **2 enfoques de autorización**:
+  1. **Usuarios en el Gateway (`Config -> Security -> Users, Roles`):**
+     * `visita_auditor` (Rol: `PlantViewer` — Solo lectura)
+     * `operador_noche` (Rol: `Operator` — Operación básica, sin permiso de cierre de lote)
+     * `laura.vidal` (Roles: `Operator`, `Supervisor` — Autorizada)
+     * `marti.sanchez` (Roles: `Administrator`, `Supervisor` — Autorizado)
+  2. **Security Zone y Security Levels (Para el Enfoque B):**
+     * Crear la zona `Zona_Planta_Control` incluyendo las IPs de control/locales (`127.0.0.1`, subred local).
+     * Verificar los niveles jerárquicos `Authenticated/Roles/Supervisor` y `Authenticated/Roles/Administrator`.
 
 ---
 
-#### 6. Directrices para la Capa 6: Suite de Validación de QA en Script Console
-* **Objetivo:** En la Script Console, estructurar un banco de pruebas utilizando la clase `SCADATestSuite` para auditar la solución ante 3 casos obligatorios:
-  * *Test 1 (Motor Matemático):* Verificar con datos semilla conocidos que el OEE, Rendimiento y Calidad coinciden exactamente con los valores teóricos esperados (Calidad: 98.68%, Rendimiento: 48.76%, OEE: 48.12%).
-  * *Test 2 (Seguridad RBAC):* Invocar el servicio con roles no autorizados (`["Operator"]`) y verificar que la operación es rechazada con `False`.
-  * *Test 3 (Cierre Autorizado):* Invocar el servicio con rol `Supervisor` y verificar que el cierre y la auditoría se completan con `True`.
-* **Criterio de Validación:** La suite debe ejecutarse en un solo clic emitiendo un informe consolidado con **100% de verificaciones superadas (`[ PASS ]`)**.
+#### Reto 3: Capa 3 — Servicio de Planta (`project.plant.service`) con Enfoque A, Enfoque B y los 5 Puntos de SCADA Real
+* **Objetivo:** Implementar el módulo `plant.service` cumpliendo los siguientes bloques:
+  1. **Funciones Puras (0% I/O):**
+     * `calculate_batch_kpis(target_units, good_units, scrap_units, operating_min, ideal_cycle_sec)`:
+       * Guarda contra `None`, tipos inválidos o tiempos `<= 0` retornando `0.0` en todas las claves.
+       * `quality`: `(good / (good + scrap)) * 100.0` (`100.0` si total es `0`).
+       * `performance`: `min(((good + scrap) / ((operating_min * 60.0) / ideal_cycle_sec)) * 100.0, 100.0)`.
+       * `oee`: `round((quality * performance) / 100.0, 2)`.
+       * Retorna `{'availability': 100.0, 'performance': ..., 'quality': ..., 'oee': ..., 'scrap_rate': ...}`.
+     * `evaluate_plc_interlocks_pure(is_remote, is_estop, is_thermal_fault, all_qualities_good=True)`:
+       * Retorna `(bool can_operate, str code, unicode msg)` bloqueando si la calidad OPC es `Bad`, si `SetaEmergencia` o `FalloTermico` están activos, o si no está en `ModoRemoto`.
+  2. **Integración de Lectura/Escritura Masiva de Tags y Handshake PLC (Punto 2 de SCADA Real):**
+     * `read_machine_live_telemetry(equip="EDAR_BOMBA_01", tag_reader_fn=None)`: Lee los 14 tags del equipo en 1 sola llamada `readBlocking` (permitiendo inyectar `tag_reader_fn` para Mocks), evalúa enclavamientos y calcula el OEE instantáneo.
+     * `_execute_plc_closure_handshake_and_reset(equip, closed_batch_id, next_batch_id=None)`: En 1 sola llamada `writeBlocking`, escribe en el PLC `OrdenCierrePLC = True`, actualiza `LoteActivoID` al código del siguiente lote (`"<batch_id>-NEXT"`) y **resetea a `0` los contadores `UnidadesBuenas`, `UnidadesScrap` y `TiempoOperativoMin` del PLC**.
+  3. **Notificación Asíncrona al ERP/MES con Timeout y Fallback (Punto 5 de SCADA Real):**
+     * `notify_erp_batch_closure_sync(batch_id, equip, good_units, scrap_units, username, force_offline=True)` y `dispatch_erp_notification_async(...)`: Usa `system.util.invokeAsynchronous` + `system.net.httpClient(timeout=2000)`. Si el ERP externo no responde, registra en `ins_Registre_Actuacions` la entrada de contingencia `CONTINGENCIA ERP [Fallback]` y retorna `{'synced': False, 'is_fallback': True, 'mode': 'STORE_AND_FORWARD_FALLBACK'}`.
+  4. **Orquestación de Cierre de Lote — Implementar AMBOS Enfoques:**
+     * **Enfoque A (`finalize_batch_service` — Procedural Directo):**
+       * Soporta `rbac_mode="A"` (valida `user_roles`) y `rbac_mode="B"` (valida `security_levels` y `security_zones`). Si es rechazado, registra `WARN` en logger e inserta traza `SEGURIDAD [RBAC-...]` en `ins_Registre_Actuacions`.
+       * **Punto 1 de SCADA Real:** Abre transacción ACID explícita (`system.db.beginNamedQueryTransaction`), ejecuta `Production/CloseBatchWithAudit` e inserta en `ins_Registre_Actuacions` incluyendo el motivo de cierre (`close_reason`), ejecuta `commitTransaction` (o `rollbackTransaction` en `except` + `closeTransaction` en `finally`), y dispara el handshake PLC y la notificación asíncrona ERP.
+     * **Enfoque B (`class PlantProductionService(BaseSCADAService)` + wrapper `finalize_batch_service_enfoque_b`):**
+       * Hereda de `templates.service_template.BaseSCADAService` (Recurso Entregado 3), delegando en `self.check_rbac_roles()`, `self.check_rbac_security_levels()`, `self.record_audit(..., tx=tx_id)` y `self.dispatch_acid_transaction(...)`.
+
+---
+
+#### Reto 4: Capa 4 — Dashboard en Perspective con Tags Vivos, Enfoque A/B y Message Handlers Reales (`Views/Laboratorios/Lab11_OEE_Dashboard`)
+* **Objetivo:** Construir el panel de supervisión y mando conectado en tiempo real a los tags del PLC y al bus de mensajería de Perspective:
+  1. **Indirect Tag Bindings Polimórficos:** Configurar `view.custom.selectedEquip` y vincular en `root.custom` los tags de la máquina seleccionada (`[default]PLANTA_PRODUCCION/{1}/UnidadesBuenas`, `UnidadesScrap`, `VelocidadActual`, `ConsignaVelocidad`, `TemperaturaMotorC`, `EstadoMarcha`, `ModoRemoto`, `SetaEmergencia`, `LoteActivoID`).
+  2. **Cálculo y Estilo de KPIs OEE (Implementar Ambos Enfoques):**
+     * *Enfoque A:* **Script Transform** de 3 líneas que invoca a `project.plant.service.calculate_batch_kpis(...)`.
+     * *Enfoque B:* **Perspective Style Classes** (`OEE/Optimal` verde `>= 85%`, `OEE/Warning` naranja `>= 65%`, `OEE/Critical` rojo `< 65%`) vinculadas mediante un **Map Transform** numérico.
+  3. **Selectores de Prueba y Firma Operativa con Motivo de Cierre (Punto 3 de SCADA Real):**
+     * Añadir selectores para elegir equipo (`drop_Equipo`), usuario simulado (`drop_UsuarioPrueba`: `visita_auditor`, `operador_noche`, `laura.vidal`, `marti.sanchez`), modo RBAC (`"A"` o `"B"`), modo de servicio (`"A"` o `"B"`) y **motivo de cierre / firma operativa (`drop_MotivoCierre` o Popup Modal de confirmación en 2 pasos)**.
+     * Añadir el botón `"SIMULAR PULSO DE TELEMETRÍA PLC"` que invoque a `project.plant.simulator.step_simulation_tick()` y publique un mensaje en `notify_toast`.
+  4. **Configuración OBLIGATORIA de los 2 Message Handlers Receptores en `root` (`Configure Scripts... -> Message Handlers`):**
+     * **`notify_toast` (Scopes: `Page`, `Session`):** Debe recoger el `payload` enviado por los botones (`msg`, `type`, `user`), formatear la marca de hora actual y cambiar dinámicamente el texto y el color de fondo del banner `lbl_BannerNotificacion` (verde en éxito, rojo en rechazo RBAC/error, azul en información).
+     * **`OnBatchStatusChanged` (Scopes: `Page`, `Session`):** Debe recoger el evento tras cada intento de cierre y ejecutar `refreshBinding("props.data")` tanto sobre la tabla `tbl_ResumenTurno` (vinculada a `Production/GetShiftSummary`) como sobre la tabla `tbl_Auditoria` (vinculada a `ins_Registre_Actuacions`).
+
+---
+
+#### Reto 5: Capa 5 — Automatización Desatendida en Gateway (CRON Idempotente + Vigilancia de Merma por Tag Change)
+* **Objetivo:** Configurar dos eventos automáticos en **Server Scripting -> Gateway Event Scripts**:
+  1. **Scheduled Script (`ConsolidacionFinTurno` — CRON `0 0 6,14,22 * * ?`):**
+     * Comprobar primero con `system.db.runScalarPrepQuery` cuántos lotes están en `'IN_PROGRESS'`. Si es `0`, registrar mensaje de idempotencia en el logger y terminar sin hacer escrituras.
+     * Si existen lotes abiertos, volcar primero los contadores vivos del PLC (`sync_live_tags_to_db`), cerrar los lotes con `closed_by = 'GATEWAY_CRON_AUTO'` y auditar el cierre masivo en `ins_Registre_Actuacions`.
+  2. **Tag Change Script (`VigilanciaMermaCriticaPLC` — Punto 4 de SCADA Real):**
+     * Suscribirse a `[default]PLANTA_PRODUCCION/*/AlarmaScrapAlto`.
+     * Cuando `not initialChange` y el valor pase a `True` (merma `> 5%`), insertar automáticamente una alerta en `ins_Registre_Actuacions` con usuario `'PLC_WATCHDOG'`.
+
+---
+
+#### Reto 6: Capa 6 — Suite de Certificación QA en `Project Library` y `Script Console` (Enfoque A + Enfoque B con `unittest`)
+* **Objetivo:** Auditar y certificar automáticamente todas las capas implementando **ambos enfoques de testing**:
+  1. **Enfoque A (Suite Directa / `SCADATestSuite` en Consola):**
+     * Validar los resultados exactos del motor OEE con los datos semilla (`quality == 98.68`, `performance == 48.76`, `oee == 48.12`), la lectura en bloque de tags reales, el rechazo RBAC a `operador_noche` y el cierre autorizado + idempotencia con `marti.sanchez`.
+  2. **Enfoque B (Librería Especializada Estándar `unittest` de Jython en `qa.test_plant_unittest`):**
+     * Crear subclases de `unittest.TestCase` ejecutadas con `unittest.TextTestRunner(verbosity=2)` que verifiquen los **6 tests obligatorios**:
+       * `test_01_calculo_oee_nominal`: Verificación con `self.assertAlmostEqual(..., places=2)`.
+       * `test_02_calculo_oee_casos_limite_y_nulos`: División por cero (`0, 0, 0.0`) y entradas `None` retornando `0.0` sin lanzar excepciones.
+       * `test_03_enclavamientos_plc_y_calidad_tags_mock`: Bloqueo ante `SetaEmergencia = True` e inyección de `MockQualifiedValue` con calidad `Bad_CommunicationFailure`.
+       * `test_04_rbac_rechazo_multiples_usuarios_no_autorizados`: Rechazo verificado para `visita_auditor` (RBAC A), `operador_noche` (RBAC B) y para `laura.vidal` cuando intenta operar desde una `SecurityZone` externa no confiable (`Zona_WiFi_Externa_No_Confiable`).
+       * `test_05_cierre_autorizado_e_idempotencia_enfoque_a_y_b`: Cierre exitoso en Enfoque A (`LOT-2026-FINAL-01` con `marti.sanchez`) y en Enfoque B (`LOT-2026-FINAL-02` con `laura.vidal`), comprobando que el segundo intento inmediato sobre ambos devuelve `False`.
+       * `test_06_handshake_plc_reset_y_notificacion_erp_fallback`: Verificación de que el PLC queda con `OrdenCierrePLC == True`, `UnidadesBuenas == 0` y `LoteActivoID == 'LOT-2026-FINAL-01-NEXT'`, y que el cliente ERP activa `STORE_AND_FORWARD_FALLBACK` ante caída del servidor externo.
+     * Incluir una función `reset_test_batches_in_db()` en `setUpClass` y al finalizar el runner para que la batería sea **100% repetible en cualquier momento**.
 
 #### Resultado esperado
 
-* Solución SCADA completamente operativa en el entorno de cada alumno, estructurada de forma modular, cibersegura y certificada por pruebas funcionales automáticas.
+* Solución SCADA de grado industrial completamente operativa en el entorno de cada alumno, validada en vivo en Perspective con múltiples usuarios y certificada al 100% (`OK` en los 6 tests de `unittest`) en la Script Console.
 
 ***
 
@@ -212,11 +469,12 @@ flowchart TD
 #### Objetivos
 
 * Evaluar el grado de asimilación global de los contenidos teóricos y prácticos impartidos a lo largo de las 11 sesiones (35 horas).
-* Certificar la adquisición de competencias en Scopes de ejecución, interoperabilidad Jython/Java, transacciones ACID, optimización SQL, seguridad RBAC y diseño modular.
+* Certificar la adquisición de competencias en Scopes de ejecución, interoperabilidad Jython/Java, transacciones ACID, optimización SQL, seguridad RBAC, diseño modular con plantillas y testing con `unittest`.
 
 #### Cuestionario Técnico Integrador
 
 * [Cuestionario Sesión 10](https://docs.google.com/forms/d/e/1FAIpQLSca5RJfunwZEwJs1myBwAPwzB85mQ5nx7OXkQZW4K2jRmy1Rg/viewform?usp=header)
+
 #### Resultado esperado
 
 * Certificación individual del aprovechamiento técnico del curso y acreditación de los conocimientos exigidos para el desarrollo profesional en Ignition SCADA.
@@ -232,16 +490,16 @@ flowchart TD
 
 #### Las 10 Reglas de Oro de Scripting en Ignition SCADA
 
-1. **Cero SQL Concatenado:** Utilizar exclusivamente Named Queries con *Value Parameters* o Prepared Statements con parámetros posicionales (`?`). Toda concatenación es una vulnerabilidad de inyección SQL.
+1. **Cero SQL Concatenado:** Utilizar exclusivamente Named Queries con *Value Parameters* (`:param`) o Prepared Statements con parámetros posicionales (`?`). Toda concatenación es una vulnerabilidad de inyección SQL.
 2. **Cero E/S en Bucles:** Agrupar lecturas y escrituras de tags en llamadas masivas por lote (`system.tag.readBlocking` y `system.tag.writeBlocking`). Prohibido llamar a tags dentro de bucles `for`.
-3. **Transforms Livianos y Puros:** Los Script Transforms de Perspective deben limitarse a formateo cosmético de 1-3 líneas. Cero llamadas a base de datos o lecturas de tags en transforms.
-4. **Captura Dual de Excepciones:** Interceptar siempre tanto errores de Jython como `java.lang.Exception` / `java.lang.Throwable` de Java para garantizar que ningún fallo de Gateway quede sin control.
+3. **Transforms Livianos y Estilos Nativos:** Los Script Transforms de Perspective deben limitarse a llamadas de 1-3 líneas a funciones puras, priorizando siempre **Expression Bindings**, **Map Transforms** y **Perspective Style Classes**. Cero llamadas a base de datos o lecturas de tags en transforms.
+4. **Transaccionalidad ACID y Captura Dual de Excepciones:** Agrupar escrituras críticas y sus pistas de auditoría bajo transacciones explícitas (`beginNamedQueryTransaction`, `commit`, `rollback`, `close` en `finally`) e interceptar tanto errores de Jython como `SQLException` y `JavaException`.
 5. **Logging Contextual Estructurado:** Erradicar por completo las sentencias `print` en Gateway y utilizar `system.util.getLogger` identificando módulo, máquina, acción y usuario.
-6. **Seguridad Defensiva en Servidor:** Toda función crítica debe validar roles (RBAC) en el backend en `Project Library` y no fiarse de las protecciones cosméticas de la interfaz gráfica.
-7. **Idempotencia en Tareas Desatendidas:** Diseñar scripts de Gateway y tareas CRON de forma que su reejecución repetida no genere efectos secundarios ni registros duplicados.
-8. **Consultas SQL Sargables:** Filtrar rangos temporales directamente sobre columnas indexadas (`created_at >= :start AND created_at <= :end`) sin aplicar transformaciones ni funciones sobre el campo en la cláusula `WHERE`.
-9. **Organización por Dominios de Planta:** Estructurar `Project Library` por áreas funcionales del proceso (`project.production.*`, `project.water_treatment.*`) y jamás por nombres de programador.
-10. **Testing Funcional Antes del Despliegue:** Validar algoritmos y contratos de datos en la Script Console mediante baterías de pruebas y datos simulados (*Mocks*) antes de pulsar `Save Project` en el Gateway de producción.
+6. **Defensa en Profundidad (Security Zones + Levels + Backend RBAC):** Combinar la restricción por zonas de red y niveles de seguridad nativos de Ignition con la validación imperativa de roles en `Project Library`, auditando todo intento rechazado.
+7. **Idempotencia y Handshake Físico PLC ↔ SCADA:** Diseñar tareas CRON de forma que su reejecución no duplique cierres, y verificar siempre los enclavamientos físicos (`ModoRemoto`, `SetaEmergencia`, calidad `Good`) antes de transaccionar.
+8. **Consultas SQL Sargables e Indexadas:** Filtrar rangos temporales directamente sobre columnas con índices B-Tree (`created_at >= :start AND created_at <= :end`) sin aplicar funciones sobre la columna en el `WHERE`.
+9. **Arquitectura Basada en Plantillas Corporativas:** Construir los servicios de planta heredando de una clase base estandarizada (`BaseSCADAService`) y desacoplar la interfaz gráfica mediante **Message Handlers** reales y ejecución asíncrona (`invokeAsynchronous`).
+10. **Testing Automatizado Reproducible (`unittest` + Mocks):** Certificar algoritmos, enclavamientos y contratos de datos en la Script Console utilizando `unittest.TestCase` y Mocks de `QualifiedValue` antes de publicar cambios en el Gateway de producción.
 
 #### Resultado esperado
 
