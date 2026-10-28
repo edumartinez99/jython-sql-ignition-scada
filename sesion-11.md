@@ -123,6 +123,14 @@ flowchart TD
     QA_B --> ServiceOrch
 ```
 
+> [!IMPORTANT]
+> **Topología Real del Entorno (Designer en Equipo Cliente vs. Gateway Desplegado en Servidor en la Nube):**
+> En este proyecto final trabajamos sobre una topología industrial distribuida real: el **Ignition Gateway** y la base de datos **PostgreSQL (`SANDBOX_DB`)** se ejecutan en un **servidor remoto en la nube** (`http://35.204.54.113:8088/`), mientras que el **Ignition Designer** y el navegador se ejecutan en tu equipo cliente. Ten en cuenta estas 4 reglas de oro:
+> 1. **Frontera de Ejecución (JVM Cloud Gateway vs. JVM Designer Local):** Los **Gateway Scheduled Scripts**, **Gateway Tag Change Scripts**, sesiones de **Perspective** e hilos de `invokeAsynchronous` corren en la **JVM del servidor en la nube**. La **Script Console** (`Tools -> Script Console`) corre en la JVM local de tu Designer y se comunica con el servidor en la nube por red.
+> 2. **Transacciones ACID Multi-Scope (`system.db.beginTransaction`):** Usa `system.db.beginTransaction(database=DB_CONN, timeout=5000)` para abrir transacciones ACID explícitas; su firma es idéntica tanto al ejecutarse en **Perspective (Gateway Cloud Scope)** como al validarse desde la **Script Console del Designer (Client/Designer Scope)**.
+> 3. **Security Zones en Servidor Cloud (`Zona_Planta_Control`):** El servidor en la nube no ve `127.0.0.1` (`localhost`) como IP de tu sesión, sino la IP remota de tu equipo cliente. Comprueba qué IP detecta el servidor en **Status -> Connections -> Perspective Sessions** (o en `session.props.address`) al configurar `Zona_Planta_Control`.
+> 4. **Ubicación de los Logs (`system.util.getLogger`):** Las pruebas lanzadas en la **Script Console** vuelcan sus logs en la consola del Designer (**Help -> Diagnostics -> Console**), mientras que las acciones desde **Perspective** y los **Gateway Event Scripts** registran sus trazas en el servidor en la nube (**Status -> Diagnostics -> Logs** en `http://35.204.54.113:8088/`).
+
 **2. Matriz de Responsabilidades, Enfoques y Fronteras de Confianza**
 
 | Capa | Enfoque A | Enfoque B (Avanzado / Corporativo) | Qué Tiene Estrictamente Prohibido |
@@ -197,51 +205,22 @@ system.tag.configure(tag_provider, [{"name": root_folder, "tagType": "Folder", "
 print "Tags aprovisionados correctamente en [default]PLANTA_PRODUCCION/"
 ```
 
-##### Recurso Entregado 2: Script SQL Compartible y Poblado para la Capa 1 (`SANDBOX_DB`)
-Ejecutar en **Tools -> Database Query Browser** (conexión `SANDBOX_DB`):
+##### Recurso Entregado 2: Script SQL de Poblado Inicial (`INSERT INTO`) para la Capa 1 (`SANDBOX_DB`)
+
+> [!WARNING]
+> **¡Atención! Las sentencias `CREATE TABLE` y `CREATE INDEX` NO se entregan hechas:**
+> Antes de poder ejecutar este script de inserción de datos en **Tools -> Database Query Browser** (conexión `SANDBOX_DB`), **deberás escribir y ejecutar tú mismo las sentencias DDL (`CREATE TABLE IF NOT EXISTS` y `CREATE INDEX IF NOT EXISTS`)** siguiendo las especificaciones del **Reto 1A** más abajo. Puedes apoyarte en las columnas y tipos de datos que observas en estos `INSERT INTO` para verificar que los nombres de tus columnas coinciden exactamente:
 
 ```sql
 -- =============================================================================
--- RECURSO ENTREGADO 2: SCRIPT SQL COMPARTIBLE E HIDRATADO (CAPA 1)
+-- RECURSO ENTREGADO 2: SCRIPT COMPARTIBLE DE POBLADO (SOLO SENTENCIAS INSERT INTO)
+-- Requiere haber creado previamente las tablas:
+--   1. plant_machines
+--   2. production_batches
+--   3. ins_Registre_Actuacions
 -- =============================================================================
-CREATE TABLE IF NOT EXISTS plant_machines (
-    machine_id VARCHAR(50) PRIMARY KEY,
-    line_name VARCHAR(60) NOT NULL,
-    ideal_cycle_time_sec DOUBLE PRECISION NOT NULL,
-    nominal_setpoint DOUBLE PRECISION NOT NULL DEFAULT 50.0,
-    engineering_unit VARCHAR(20) NOT NULL DEFAULT 'u/h',
-    is_active BOOLEAN NOT NULL DEFAULT TRUE
-);
 
-ALTER TABLE plant_machines ADD COLUMN IF NOT EXISTS nominal_setpoint DOUBLE PRECISION NOT NULL DEFAULT 50.0;
-ALTER TABLE plant_machines ADD COLUMN IF NOT EXISTS engineering_unit VARCHAR(20) NOT NULL DEFAULT 'u/h';
-
-CREATE TABLE IF NOT EXISTS production_batches (
-    batch_id VARCHAR(50) PRIMARY KEY,
-    machine_id VARCHAR(50) NOT NULL REFERENCES plant_machines(machine_id),
-    shift_id INT NOT NULL CHECK (shift_id IN (1, 2, 3)),
-    target_units INT NOT NULL,
-    good_units INT NOT NULL DEFAULT 0,
-    scrap_units INT NOT NULL DEFAULT 0,
-    operating_time_min DOUBLE PRECISION NOT NULL DEFAULT 0.0,
-    status VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    closed_at TIMESTAMP NULL,
-    closed_by VARCHAR(100) NULL
-);
-
-CREATE TABLE IF NOT EXISTS ins_Registre_Actuacions (
-    id SERIAL PRIMARY KEY,
-    Equip VARCHAR(60) NOT NULL,
-    Descripcio TEXT NOT NULL,
-    Usuari VARCHAR(80) NOT NULL,
-    DataHora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_batches_shift_created ON production_batches (shift_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_batches_status_created ON production_batches (status, created_at);
-CREATE INDEX IF NOT EXISTS idx_audit_equip_datahora ON ins_Registre_Actuacions (Equip, DataHora DESC);
-
+-- 1. Poblado del catálogo de equipos industriales (6 equipos en 4 áreas)
 INSERT INTO plant_machines (machine_id, line_name, ideal_cycle_time_sec, nominal_setpoint, engineering_unit, is_active)
 VALUES 
     ('EDAR_BOMBA_01',      'LINEA_TRACTAMENT_AIGUA',  2.5,  70.0,  'm3/h',  TRUE),
@@ -251,26 +230,48 @@ VALUES
     ('LINEA_ENVASADO_01',  'LINEA_ENVASAT_PET',       1.2,  50.0,  'bot/s', TRUE),
     ('LINEA_ENVASADO_02',  'LINEA_ENVASAT_VIDRE',     1.5,  40.0,  'bot/s', FALSE)
 ON CONFLICT (machine_id) DO UPDATE SET
-    line_name = EXCLUDED.line_name, ideal_cycle_time_sec = EXCLUDED.ideal_cycle_time_sec,
-    nominal_setpoint = EXCLUDED.nominal_setpoint, engineering_unit = EXCLUDED.engineering_unit, is_active = EXCLUDED.is_active;
+    line_name = EXCLUDED.line_name,
+    ideal_cycle_time_sec = EXCLUDED.ideal_cycle_time_sec,
+    nominal_setpoint = EXCLUDED.nominal_setpoint,
+    engineering_unit = EXCLUDED.engineering_unit,
+    is_active = EXCLUDED.is_active;
 
+-- 2. Poblado de lotes de producción (9 lotes históricos cerrados + 3 lotes 'IN_PROGRESS')
 INSERT INTO production_batches (batch_id, machine_id, shift_id, target_units, good_units, scrap_units, operating_time_min, status, created_at, closed_at, closed_by)
 VALUES
-    ('LOT-2026-HIST-01',  'EDAR_BOMBA_01',     1, 5000,  4910,  45, 435.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '6 hours',  CURRENT_TIMESTAMP - INTERVAL '2 hours', 'laura.vidal'),
-    ('LOT-2026-HIST-02',  'EDAR_BOMBA_02',     1, 4500,  4380,  95, 410.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '5 hours',  CURRENT_TIMESTAMP - INTERVAL '1 hour',  'laura.vidal'),
-    ('LOT-2026-HIST-03',  'LINEA_ENVASADO_01', 1, 15000, 14650, 210, 395.0, 'CLOSED',     CURRENT_TIMESTAMP - INTERVAL '5 hours',  CURRENT_TIMESTAMP - INTERVAL '1 hour',  'marti.sanchez'),
+    ('LOT-2026-HIST-01',  'EDAR_BOMBA_01',     1, 5000,  4910,  45, 435.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '6 hours',  CURRENT_TIMESTAMP - INTERVAL '2 hours',    'laura.vidal'),
+    ('LOT-2026-HIST-02',  'EDAR_BOMBA_02',     1, 4500,  4380,  95, 410.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '5 hours',  CURRENT_TIMESTAMP - INTERVAL '1 hour',     'laura.vidal'),
+    ('LOT-2026-HIST-03',  'LINEA_ENVASADO_01', 1, 15000, 14650, 210, 395.0, 'CLOSED',     CURRENT_TIMESTAMP - INTERVAL '5 hours',  CURRENT_TIMESTAMP - INTERVAL '1 hour',     'marti.sanchez'),
     ('LOT-2026-HIST-04',  'EDAR_COMPRESOR_01', 1, 1200,  1150,  18, 380.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '4 hours',  CURRENT_TIMESTAMP - INTERVAL '30 minutes', 'laura.vidal'),
-    ('LOT-2026-HIST-05',  'EDAR_BOMBA_01',     2, 5000,  4720, 130, 405.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '14 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours', 'marti.sanchez'),
-    ('LOT-2026-HIST-06',  'LINEA_ENVASADO_01', 2, 15000, 14100, 340, 385.0, 'CLOSED',     CURRENT_TIMESTAMP - INTERVAL '14 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours', 'GATEWAY_CRON_AUTO'),
-    ('LOT-2026-HIST-07',  'DECANTADOR_01',     2, 900,    860,  12, 360.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '13 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours', 'laura.vidal'),
-    ('LOT-2026-HIST-08',  'EDAR_BOMBA_02',     3, 4500,  4290, 110, 400.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '20 hours', CURRENT_TIMESTAMP - INTERVAL '15 hours', 'GATEWAY_CRON_AUTO'),
-    ('LOT-2026-HIST-09',  'EDAR_COMPRESOR_01', 3, 1200,  1110,  25, 370.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '20 hours', CURRENT_TIMESTAMP - INTERVAL '15 hours', 'GATEWAY_CRON_AUTO'),
+    ('LOT-2026-HIST-05',  'EDAR_BOMBA_01',     2, 5000,  4720, 130, 405.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '14 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours',    'marti.sanchez'),
+    ('LOT-2026-HIST-06',  'LINEA_ENVASADO_01', 2, 15000, 14100, 340, 385.0, 'CLOSED',     CURRENT_TIMESTAMP - INTERVAL '14 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours',    'GATEWAY_CRON_AUTO'),
+    ('LOT-2026-HIST-07',  'DECANTADOR_01',     2, 900,    860,  12, 360.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '13 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours',    'laura.vidal'),
+    ('LOT-2026-HIST-08',  'EDAR_BOMBA_02',     3, 4500,  4290, 110, 400.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '20 hours', CURRENT_TIMESTAMP - INTERVAL '15 hours',   'GATEWAY_CRON_AUTO'),
+    ('LOT-2026-HIST-09',  'EDAR_COMPRESOR_01', 3, 1200,  1110,  25, 370.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '20 hours', CURRENT_TIMESTAMP - INTERVAL '15 hours',   'GATEWAY_CRON_AUTO'),
     ('LOT-2026-FINAL-01', 'EDAR_BOMBA_01',     1, 5000,  4850,  65, 420.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '30 minutes', NULL, NULL),
     ('LOT-2026-FINAL-02', 'LINEA_ENVASADO_01', 1, 15000, 11200, 180, 280.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '25 minutes', NULL, NULL),
     ('LOT-2026-FINAL-03', 'EDAR_COMPRESOR_01', 1, 1200,   980,  15, 310.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '20 minutes', NULL, NULL)
 ON CONFLICT (batch_id) DO UPDATE SET
-    good_units = EXCLUDED.good_units, scrap_units = EXCLUDED.scrap_units, operating_time_min = EXCLUDED.operating_time_min,
-    status = EXCLUDED.status, created_at = EXCLUDED.created_at, closed_at = EXCLUDED.closed_at, closed_by = EXCLUDED.closed_by;
+    good_units = EXCLUDED.good_units,
+    scrap_units = EXCLUDED.scrap_units,
+    operating_time_min = EXCLUDED.operating_time_min,
+    status = EXCLUDED.status,
+    created_at = EXCLUDED.created_at,
+    closed_at = EXCLUDED.closed_at,
+    closed_by = EXCLUDED.closed_by;
+
+-- 3. Poblado inicial de la tabla de auditoría ins_Registre_Actuacions
+INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
+SELECT 'EDAR_BOMBA_01', 'OPERACION: Inicio de lote LOT-2026-FINAL-01 en modo REMOTO (Consigna: 70.0 m3/h)', 'laura.vidal', CURRENT_TIMESTAMP - INTERVAL '30 minutes'
+WHERE NOT EXISTS (SELECT 1 FROM ins_Registre_Actuacions WHERE Descripcio LIKE '%LOT-2026-FINAL-01%');
+
+INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
+SELECT 'EDAR_BOMBA_01', 'SEGURIDAD: Intento no autorizado de cierre de lote por usuario sin rol Supervisor', 'operador_noche', CURRENT_TIMESTAMP - INTERVAL '15 minutes'
+WHERE NOT EXISTS (SELECT 1 FROM ins_Registre_Actuacions WHERE Usuari = 'operador_noche' AND Equip = 'EDAR_BOMBA_01');
+
+INSERT INTO ins_Registre_Actuacions (Equip, Descripcio, Usuari, DataHora)
+SELECT 'LINEA_ENVASADO_01', 'OPERACION: Ajuste de consigna de velocidad a 50.0 bot/s validado con enclavamientos OK', 'marti.sanchez', CURRENT_TIMESTAMP - INTERVAL '10 minutes'
+WHERE NOT EXISTS (SELECT 1 FROM ins_Registre_Actuacions WHERE Equip = 'LINEA_ENVASADO_01');
 ```
 
 ##### Recurso Entregado 3: Plantilla Canónica `templates.service_template` (Sesión 10 - Lab 10.2)
@@ -322,10 +323,9 @@ class BaseSCADAService(object):
 
     def dispatch_acid_transaction(self, action_name, equipment_id, user_str, tx_operation_fn):
         """Ejecuta `tx_operation_fn(tx_id)` dentro de una transaccion ACID con Commit, Rollback y Close en finally."""
-        project_name = system.util.getProjectName()
         tx_id = None
         try:
-            tx_id = system.db.beginNamedQueryTransaction(project=project_name, database=self.db_connection)
+            tx_id = system.db.beginTransaction(database=self.db_connection, timeout=5000)
             payload = tx_operation_fn(tx_id)
             system.db.commitTransaction(tx_id)
             self.logger.info("[ACID:{}] Commit exitoso en '{}' por '{}'".format(action_name, equipment_id, user_str))
@@ -366,7 +366,24 @@ class BaseSCADAService(object):
 
 ---
 
-#### Reto 1: Capa 2 — Named Queries Parametrizadas (`Production/*`)
+#### Reto 1A: Capa 1 — Escritura del Esquema Relacional SQL DDL (`CREATE TABLE` + `CREATE INDEX`) e Hidratación
+* **Objetivo:** Redactar y ejecutar por ti mismo en **Tools -> Database Query Browser** (`SANDBOX_DB`) las sentencias DDL idempotentes para crear las 3 tablas del proyecto y sus índices de rendimiento antes de lanzar los `INSERT INTO` del **Recurso Entregado 2**:
+  1. **Tabla `plant_machines` (`CREATE TABLE IF NOT EXISTS`):**
+     * `machine_id` (`VARCHAR(50)`, clave primaria `PRIMARY KEY`), `line_name` (`VARCHAR(60) NOT NULL`), `ideal_cycle_time_sec` (`DOUBLE PRECISION NOT NULL`), `nominal_setpoint` (`DOUBLE PRECISION NOT NULL DEFAULT 50.0`), `engineering_unit` (`VARCHAR(20) NOT NULL DEFAULT 'u/h'`), `is_active` (`BOOLEAN NOT NULL DEFAULT TRUE`).
+     * *(Tip: Si la tabla ya existía de laboratorios previos sin las columnas `nominal_setpoint` o `engineering_unit`, añade `ALTER TABLE plant_machines ADD COLUMN IF NOT EXISTS ...`)*
+  2. **Tabla `production_batches` (`CREATE TABLE IF NOT EXISTS`):**
+     * `batch_id` (`VARCHAR(50)`, clave primaria `PRIMARY KEY`), `machine_id` (`VARCHAR(50) NOT NULL`, clave foránea `REFERENCES plant_machines(machine_id)`), `shift_id` (`INT NOT NULL` con restricción `CHECK (shift_id IN (1, 2, 3))`), `target_units` (`INT NOT NULL`), `good_units` (`INT NOT NULL DEFAULT 0`), `scrap_units` (`INT NOT NULL DEFAULT 0`), `operating_time_min` (`DOUBLE PRECISION NOT NULL DEFAULT 0.0`), `status` (`VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS'`), `created_at` (`TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`), `closed_at` (`TIMESTAMP NULL`), `closed_by` (`VARCHAR(100) NULL`).
+  3. **Tabla `ins_Registre_Actuacions` (`CREATE TABLE IF NOT EXISTS`):**
+     * `id` (`SERIAL PRIMARY KEY`), `Equip` (`VARCHAR(60) NOT NULL`), `Descripcio` (`TEXT NOT NULL`), `Usuari` (`VARCHAR(80) NOT NULL`), `DataHora` (`TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`).
+  4. **Índices Compuestos B-Tree Sargables (`CREATE INDEX IF NOT EXISTS`):**
+     * `idx_batches_shift_created` sobre `production_batches (shift_id, created_at)`.
+     * `idx_batches_status_created` sobre `production_batches (status, created_at)`.
+     * `idx_audit_equip_datahora` sobre `ins_Registre_Actuacions (Equip, DataHora DESC)`.
+  5. **Ejecución del Poblado:** Una vez creadas tus tablas e índices, ejecuta el bloque de sentencias `INSERT INTO` del **Recurso Entregado 2** y verifica que tienes 6 máquinas, 12 lotes (9 `'CLOSED'` y 3 `'IN_PROGRESS'`) y las trazas iniciales de auditoría.
+
+---
+
+#### Reto 1B: Capa 2 — Named Queries Parametrizadas (`Production/*`)
 * **Objetivo:** Crear en **Named Queries** (carpeta `Production`, conexión `SANDBOX_DB`) 3 consultas con *Value Parameters*:
   1. **`Production/GetShiftSummary` (`Query`):**
      * *Parámetros:* `shiftId` (`Integer`), `startDate` (`DateTime`), `endDate` (`DateTime`).
@@ -380,16 +397,17 @@ class BaseSCADAService(object):
 
 ---
 
-#### Reto 2: Configuración de Seguridad RBAC (Enfoque A y Enfoque B) y Usuarios de Prueba
-* **Objetivo:** Configurar la seguridad para validar el sistema con **4 perfiles de usuario distintos** y **2 enfoques de autorización**:
-  1. **Usuarios en el Gateway (`Config -> Security -> Users, Roles`):**
+#### Reto 2: Configuración de Seguridad RBAC (Enfoque A y Enfoque B) y Usuarios de Prueba en el Gateway Cloud
+* **Objetivo:** Configurar la seguridad en el **Gateway desplegado en el servidor en la nube** (`http://<IP-GATEWAY-CLOUD>:8088/`, ej. `http://35.204.54.113:8088/`) para validar el sistema con **4 perfiles de usuario distintos** y **2 enfoques de autorización**:
+  1. **Usuarios en el Gateway Cloud (`Config -> Security -> Users, Roles`):**
      * `visita_auditor` (Rol: `PlantViewer` — Solo lectura)
      * `operador_noche` (Rol: `Operator` — Operación básica, sin permiso de cierre de lote)
      * `laura.vidal` (Roles: `Operator`, `Supervisor` — Autorizada)
      * `marti.sanchez` (Roles: `Administrator`, `Supervisor` — Autorizado)
-  2. **Security Zone y Security Levels (Para el Enfoque B):**
-     * Crear la zona `Zona_Planta_Control` incluyendo las IPs de control/locales (`127.0.0.1`, subred local).
-     * Verificar los niveles jerárquicos `Authenticated/Roles/Supervisor` y `Authenticated/Roles/Administrator`.
+  2. **Security Zone y Security Levels en Entorno Cloud (Para el Enfoque B):**
+     * **Importante (Designer Local/Guacamole vs. Gateway en la Nube):** Al no estar el Gateway en `localhost`, la IP de origen que recibe el servidor en la nube es la IP pública/NAT o la IP de la red VPC/contenedor de tu sesión cliente. Consulta primero qué IP detecta el Gateway entrando en **Status -> Connections -> Designer Sessions / Perspective Sessions** (o leyendo `self.session.props.address` en Perspective).
+     * Crear en **Config -> Security -> Security Zones** la zona `Zona_Planta_Control` incluyendo en **IP Addresses** la IP detectada de tu puesto cliente y los rangos de la red de prácticas (`<TU_IP_CLIENTE>, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16`).
+     * Verificar en **Config -> Security -> Security Levels** los niveles jerárquicos `Authenticated/Roles/Supervisor`, `Authenticated/Roles/Administrator` y `SecurityZones/Zona_Planta_Control`.
 
 ---
 
@@ -412,7 +430,7 @@ class BaseSCADAService(object):
   4. **Orquestación de Cierre de Lote — Implementar AMBOS Enfoques:**
      * **Enfoque A (`finalize_batch_service` — Procedural Directo):**
        * Soporta `rbac_mode="A"` (valida `user_roles`) y `rbac_mode="B"` (valida `security_levels` y `security_zones`). Si es rechazado, registra `WARN` en logger e inserta traza `SEGURIDAD [RBAC-...]` en `ins_Registre_Actuacions`.
-       * **Punto 1 de SCADA Real:** Abre transacción ACID explícita (`system.db.beginNamedQueryTransaction`), ejecuta `Production/CloseBatchWithAudit` e inserta en `ins_Registre_Actuacions` incluyendo el motivo de cierre (`close_reason`), ejecuta `commitTransaction` (o `rollbackTransaction` en `except` + `closeTransaction` en `finally`), y dispara el handshake PLC y la notificación asíncrona ERP.
+       * **Punto 1 de SCADA Real:** Abre transacción ACID explícita (`system.db.beginTransaction(database=DB_CONN, timeout=5000)`), ejecuta `Production/CloseBatchWithAudit` e inserta en `ins_Registre_Actuacions` incluyendo el motivo de cierre (`close_reason`), ejecuta `commitTransaction` (o `rollbackTransaction` en `except` + `closeTransaction` en `finally`), y dispara el handshake PLC y la notificación asíncrona ERP.
      * **Enfoque B (`class PlantProductionService(BaseSCADAService)` + wrapper `finalize_batch_service_enfoque_b`):**
        * Hereda de `templates.service_template.BaseSCADAService` (Recurso Entregado 3), delegando en `self.check_rbac_roles()`, `self.check_rbac_security_levels()`, `self.record_audit(..., tx=tx_id)` y `self.dispatch_acid_transaction(...)`.
 
