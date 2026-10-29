@@ -14,7 +14,7 @@ description: Proyecto Final Integrador, Test Global y Cierre del Curso
 #### Contenidos
 
 * Repaso de dudas finales sobre testing automatizado (`unittest`), plantillas canónicas de módulo (`plant.service_template`) y directrices PEP 8.
-* Verificación de `SANDBOX_DB`, proveedor de tags `[default]` y acceso al Gateway en la nube (`http://35.204.54.113:8088/`).
+* Verificación de `DB_Admin`, proveedor de tags `[default]` y acceso al Gateway en la nube (`http://35.204.54.113:8088/`).
 * Cronograma de la sesión:
   * **Bloque 1:** Instalación rápida de recursos base y desarrollo autónomo de las capas del proyecto.
   * **Bloque 2:** Pruebas multi-usuario RBAC (Enfoque A y Enfoque B) en Perspective y certificación QA con `unittest`.
@@ -107,7 +107,7 @@ flowchart TD
 
 > [!IMPORTANT]
 > **Topología del Entorno (Designer Local vs. Gateway en Servidor Cloud):**
-> El **Ignition Gateway** y **PostgreSQL (`SANDBOX_DB`)** se ejecutan en un **servidor en la nube** (`http://35.204.54.113:8088/`), mientras que el **Designer** y tu navegador corren en tu puesto cliente:
+> El **Ignition Gateway** y **PostgreSQL (`DB_Admin`)** se ejecutan en un **servidor en la nube** (`http://35.204.54.113:8088/`), mientras que el **Designer** y tu navegador corren en tu puesto cliente:
 > 1. **Transacciones ACID Multi-Scope:** Usa `system.db.beginTransaction(database=DB_CONN, timeout=5000)`, cuya firma es idéntica tanto en **Perspective (Gateway Cloud)** como en **Script Console (Designer Local)**.
 > 2. **Security Zones en Cloud (`Zona_Planta_Control`):** El servidor cloud no ve `127.0.0.1` como IP de tu sesión, sino la IP remota de tu equipo cliente. Consúltala en **Status -> Connections -> Perspective Sessions** al configurar `Zona_Planta_Control`.
 
@@ -149,7 +149,7 @@ root_folder = "PLANTA_PRODUCCION"
 
 equipos_config = [
     {"id": "EDAR_BOMBA_01",     "lote": "LOT-2026-FINAL-01", "target": 5000,  "good": 4850,  "scrap": 65,  "op_min": 420.0},
-    {"id": "EDAR_BOMBA_02",     "lote": "LOT-2026-HIST-02",  "target": 4500,  "good": 4380,  "scrap": 95,  "op_min": 410.0},
+    {"id": "EDAR_BOMBA_02",     "lote": "LOT-2026-FINAL-04", "target": 4500,  "good": 4380,  "scrap": 95,  "op_min": 410.0},
     {"id": "EDAR_COMPRESOR_01", "lote": "LOT-2026-FINAL-03", "target": 1200,  "good": 980,   "scrap": 15,  "op_min": 310.0},
     {"id": "LINEA_ENVASADO_01", "lote": "LOT-2026-FINAL-02", "target": 15000, "good": 11200, "scrap": 180, "op_min": 280.0}
 ]
@@ -228,20 +228,28 @@ def step_simulation_tick(increment_counters=True):
 
 
 def reset_seed_counters_for_qa():
-    base = "{}/EDAR_BOMBA_01".format(TAG_ROOT)
-    paths = [
-        base + "/ModoRemoto", base + "/SetaEmergencia", base + "/OrdenCierrePLC",
-        base + "/LoteActivoID", base + "/UnidadesObjetivo", base + "/UnidadesBuenas",
-        base + "/UnidadesScrap", base + "/TiempoOperativoMin"
+    seeds = [
+        ("EDAR_BOMBA_01",     "LOT-2026-FINAL-01", 5000,  4850,  65,  420.0),
+        ("EDAR_BOMBA_02",     "LOT-2026-FINAL-04", 4500,  4380,  95,  410.0),
+        ("EDAR_COMPRESOR_01", "LOT-2026-FINAL-03", 1200,   980,  15,  310.0),
+        ("LINEA_ENVASADO_01", "LOT-2026-FINAL-02", 15000, 11200, 180, 280.0)
     ]
-    vals = [True, False, False, "LOT-2026-FINAL-01", 5000, 4850, 65, 420.0]
+    paths, vals = [], []
+    for eq, lote, target, good, scrap, op_min in seeds:
+        base = "{}/{}".format(TAG_ROOT, eq)
+        paths.extend([
+            base + "/ModoRemoto", base + "/SetaEmergencia", base + "/OrdenCierrePLC",
+            base + "/LoteActivoID", base + "/UnidadesObjetivo", base + "/UnidadesBuenas",
+            base + "/UnidadesScrap", base + "/TiempoOperativoMin"
+        ])
+        vals.extend([True, False, False, lote, target, good, scrap, op_min])
     system.tag.writeBlocking(paths, vals, 3000)
     return True
 ```
 
-##### Recurso Entregado 3: Sentencias `INSERT INTO` para Poblar la Capa 1 (`SANDBOX_DB`)
+##### Recurso Entregado 3: Sentencias `INSERT INTO` para Poblar la Capa 1 (`DB_Admin`)
 > [!WARNING]
-> **Importante:** Este script contiene **únicamente las sentencias `INSERT INTO`**. Antes de ejecutarlo en **Tools -> Database Query Browser** (`SANDBOX_DB`), debes escribir y ejecutar por ti mismo los `CREATE TABLE` y `CREATE INDEX` del **Reto 1**.
+> **Importante:** Este script contiene **únicamente las sentencias `INSERT INTO`**. Antes de ejecutarlo en **Tools -> Database Query Browser** (`DB_Admin`), debes escribir y ejecutar por ti mismo los `CREATE TABLE` y `CREATE INDEX` del **Reto 1**.
 
 ```sql
 -- =============================================================================
@@ -267,7 +275,8 @@ VALUES
     ('LOT-2026-HIST-05',  'EDAR_COMPRESOR_01', 2, 1200,  1150,  18, 380.0, 'CLOSED',      CURRENT_TIMESTAMP - INTERVAL '13 hours', CURRENT_TIMESTAMP - INTERVAL '8 hours', 'GATEWAY_CRON_AUTO'),
     ('LOT-2026-FINAL-01', 'EDAR_BOMBA_01',     1, 5000,  4850,  65, 420.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '30 minutes', NULL, NULL),
     ('LOT-2026-FINAL-02', 'LINEA_ENVASADO_01', 1, 15000, 11200, 180, 280.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '25 minutes', NULL, NULL),
-    ('LOT-2026-FINAL-03', 'EDAR_COMPRESOR_01', 1, 1200,   980,  15, 310.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '20 minutes', NULL, NULL)
+    ('LOT-2026-FINAL-03', 'EDAR_COMPRESOR_01', 1, 1200,   980,  15, 310.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '20 minutes', NULL, NULL),
+    ('LOT-2026-FINAL-04', 'EDAR_BOMBA_02',     1, 4500,  4380,  95, 410.0, 'IN_PROGRESS', CURRENT_TIMESTAMP - INTERVAL '15 minutes', NULL, NULL)
 ON CONFLICT (batch_id) DO UPDATE SET
     good_units = EXCLUDED.good_units,
     scrap_units = EXCLUDED.scrap_units,
@@ -297,7 +306,7 @@ Descripcion: Plantilla canonica corporativa (Lab 10.2) para herencia POO en Capa
 from java.lang import Exception as JavaException
 from java.sql import SQLException
 
-DEFAULT_DB_CONNECTION = "SANDBOX_DB"
+DEFAULT_DB_CONNECTION = "DB_Admin"
 
 
 class BaseSCADAService(object):
@@ -617,17 +626,17 @@ Para no perder tiempo arrastrando controles ni creando propiedades una por una e
 #### 🛠️ Especificaciones del Reto por Capas (Lo que debe desarrollar el alumno)
 
 #### Reto 1: Capa 1 — Esquema Relacional SQL DDL (`CREATE TABLE` + `CREATE INDEX`) y Poblado
-* Redactar y ejecutar en **Tools -> Database Query Browser** (`SANDBOX_DB`):
+* Redactar y ejecutar en **Tools -> Database Query Browser** (`DB_Admin`):
   1. **`plant_machines` (`CREATE TABLE IF NOT EXISTS`):** `machine_id` (`VARCHAR(50) PRIMARY KEY`), `line_name` (`VARCHAR(60) NOT NULL`), `ideal_cycle_time_sec` (`DOUBLE PRECISION NOT NULL`), `is_active` (`BOOLEAN NOT NULL DEFAULT TRUE`).
   2. **`production_batches` (`CREATE TABLE IF NOT EXISTS`):** `batch_id` (`VARCHAR(50) PRIMARY KEY`), `machine_id` (`VARCHAR(50) NOT NULL REFERENCES plant_machines(machine_id)`), `shift_id` (`INT NOT NULL CHECK (shift_id IN (1, 2, 3))`), `target_units` (`INT NOT NULL`), `good_units` (`INT NOT NULL DEFAULT 0`), `scrap_units` (`INT NOT NULL DEFAULT 0`), `operating_time_min` (`DOUBLE PRECISION NOT NULL DEFAULT 0.0`), `status` (`VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS'`), `created_at` (`TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`), `closed_at` (`TIMESTAMP NULL`), `closed_by` (`VARCHAR(100) NULL`).
   3. **`ins_Registre_Actuacions` (`CREATE TABLE IF NOT EXISTS`):** `id` (`SERIAL PRIMARY KEY`), `Equip` (`VARCHAR(60) NOT NULL`), `Descripcio` (`TEXT NOT NULL`), `Usuari` (`VARCHAR(80) NOT NULL`), `DataHora` (`TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`).
   4. **Índices B-Tree:** `idx_batches_shift_created` en `(shift_id, created_at)`, `idx_batches_status_created` en `(status, created_at)` e `idx_audit_equip_datahora` en `(Equip, DataHora DESC)`.
-  5. Ejecutar a continuación los `INSERT INTO` del **Recurso Entregado 3** (verificando 4 máquinas y 8 lotes: 5 `'CLOSED'` y 3 `'IN_PROGRESS'`).
+  5. Ejecutar a continuación los `INSERT INTO` del **Recurso Entregado 3** (verificando 4 máquinas y 9 lotes: 5 `'CLOSED'` y 4 `'IN_PROGRESS'`, uno activo por máquina).
 
 ---
 
 #### Reto 2: Capa 2 — Las 2 Named Queries Parametrizadas (`Production/*`)
-* Crear en **Named Queries** (carpeta `Production`, conexión `SANDBOX_DB`):
+* Crear en **Named Queries** (carpeta `Production`, conexión `DB_Admin`):
   1. **`Production/GetShiftSummary` (`Query`):**
      * *Parámetros:* `shiftId` (`Integer`), `startDate` (`DateTime`), `endDate` (`DateTime`).
      * *Columnas:* `machine_id`, `line_name`, `total_batches`, `active_batches`, `sum_good`, `sum_scrap`, `scrap_rate_pct` (protegido con `NULLIF`).
@@ -651,7 +660,7 @@ Para no perder tiempo arrastrando controles ni creando propiedades una por una e
      * `evaluate_plc_interlocks_pure(is_remote, is_estop, all_qualities_good=True)`: Retorna `(bool, str_code, unicode_msg)` bloqueando ante calidad `Bad`, `SetaEmergencia = True` o `ModoRemoto = False`.
   2. **Lectura en Bloque de los 7 Tags Esenciales y Handshake PLC:**
      * `read_machine_live_telemetry(equip="EDAR_BOMBA_01", tag_reader_fn=None)`: Lee en 1 sola llamada `readBlocking` los **7 tags esenciales** (`ModoRemoto`, `SetaEmergencia`, `LoteActivoID`, `UnidadesObjetivo`, `UnidadesBuenas`, `UnidadesScrap`, `TiempoOperativoMin`), evalúa enclavamientos y calcula el OEE.
-     * `_execute_plc_closure_handshake(equip, closed_batch_id)`: En 1 sola llamada `writeBlocking`, escribe `OrdenCierrePLC = True`, `LoteActivoID = "<batch_id>-NEXT"` y resetea a `0` `UnidadesBuenas`, `UnidadesScrap` y `TiempoOperativoMin`.
+     * `_execute_plc_closure_handshake(equip, closed_batch_id)`: Registra en `production_batches` (`DB_Admin`) el nuevo lote `<batch_id>-NEXT` con `status = 'IN_PROGRESS'` (para permitir cierres sucesivos en Perspective) y, en 1 sola llamada `writeBlocking`, escribe `OrdenCierrePLC = True`, `LoteActivoID = "<batch_id>-NEXT"` y resetea a `0` `UnidadesBuenas`, `UnidadesScrap` y `TiempoOperativoMin`.
   3. **Servicio POO (`class PlantProductionService(BaseSCADAService)` + wrapper `finalize_batch_service(...)`):**
      * Hereda de `plant.service_template.BaseSCADAService` (**Recurso Entregado 4**).
      * Soporta **RBAC Enfoque A** (`rbac_mode="A"` $\rightarrow$ `self.check_rbac_roles`) y **RBAC Enfoque B** (`rbac_mode="B"` $\rightarrow$ `self.check_rbac_security_levels`). Si deniega el acceso, registra `WARN` e inserta alerta `SEGURIDAD [RBAC-...]` con `self.record_audit(...)`.
