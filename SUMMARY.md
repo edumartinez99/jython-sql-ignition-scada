@@ -19,5 +19,6 @@
 * [Sesión 9](sesion-9.md)
 * [Sesión 10](sesion-10.md)
 * [Sesión 11](sesion-11.md)
+* [Lab 11](lab-11.md)
 
 ## Group 1
