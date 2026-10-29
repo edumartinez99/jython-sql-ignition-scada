@@ -149,18 +149,18 @@ flowchart TD
 
 #### Objetivos del Reto
 
-* Construir e integrar de forma autónoma todas las capas del proyecto final en el entorno sandbox partiendo de **3 recursos base compartidos** (el script de aprovisionamiento de Tags, el script SQL poblado de Capa 1 y la plantilla `templates.service_template` del Lab 10.2) y siguiendo las especificaciones técnicas de cada capa.
+* Construir e integrar de forma autónoma todas las capas del proyecto final en el entorno sandbox partiendo de **4 recursos base entregados** (el script de aprovisionamiento de Tags, el simulador de telemetría viva `project.plant.simulator`, el script SQL de `INSERT INTO` para poblar la Capa 1 y la plantilla `templates.service_template` del Lab 10.2) y siguiendo las especificaciones técnicas de cada capa.
 * Implementar **ambos enfoques (Enfoque A y Enfoque B)** en el servicio de planta, en el control de acceso RBAC, en la capa visual de Perspective y en la suite de certificación QA.
 * Incorporar los **5 mecanismos de grado industrial** que distinguen un SCADA real de planta de una simple PoC.
 
 ---
 
-#### 📦 Fase 0: Recursos Base Entregados al Alumno (Ejecutar antes de comenzar el reto)
+#### 📦 Fase 0: Recursos Base Entregados al Alumno (Instalar antes de comenzar el reto)
 
-Para garantizar que todos los participantes trabajen sobre un catálogo de máquinas, lotes multi-turno, jerarquía de tags y plantilla corporativa idénticos, copia y ejecuta estos **3 bloques base** en tu entorno:
+Para simular el campo industrial (PLCs y telemetría viva) y garantizar que todos los participantes trabajen sobre un catálogo de máquinas, lotes multi-turno y plantilla corporativa idénticos, instala estos **4 recursos base** en tu proyecto:
 
 ##### Recurso Entregado 1: Script de Creación de Tags de Planta en `[default]PLANTA_PRODUCCION`
-Ejecutar en **Tools -> Script Console** para crear las 4 máquinas con sus 15 tags de estado, contadores vivos, consignas y enclavamientos:
+Ejecutar una vez en **Tools -> Script Console** para crear las 4 máquinas con sus 15 tags de estado, contadores vivos, consignas y enclavamientos:
 
 ```python
 # ==============================================================================
@@ -183,37 +183,150 @@ for eq in equipos_config:
         "name": eq["id"],
         "tagType": "Folder",
         "tags": [
-            {"name": "EstadoMarcha",       "tagType": "AtomicTag", "valueType": "Boolean", "value": True},
-            {"name": "ModoRemoto",         "tagType": "AtomicTag", "valueType": "Boolean", "value": True},
-            {"name": "SetaEmergencia",     "tagType": "AtomicTag", "valueType": "Boolean", "value": False},
-            {"name": "FalloTermico",       "tagType": "AtomicTag", "valueType": "Boolean", "value": False},
-            {"name": "AlarmaScrapAlto",    "tagType": "AtomicTag", "valueType": "Boolean", "value": False},
-            {"name": "LoteActivoID",       "tagType": "AtomicTag", "valueType": "String",  "value": eq["lote_inicial"]},
-            {"name": "UnidadesObjetivo",   "tagType": "AtomicTag", "valueType": "Int4",    "value": eq["target"]},
-            {"name": "UnidadesBuenas",     "tagType": "AtomicTag", "valueType": "Int4",    "value": eq["good"]},
-            {"name": "UnidadesScrap",      "tagType": "AtomicTag", "valueType": "Int4",    "value": eq["scrap"]},
-            {"name": "TiempoOperativoMin", "tagType": "AtomicTag", "valueType": "Float4",  "value": eq["op_min"]},
-            {"name": "TiempoCicloIdealSeg","tagType": "AtomicTag", "valueType": "Float4",  "value": eq["ciclo_ideal"]},
-            {"name": "VelocidadActual",    "tagType": "AtomicTag", "valueType": "Float4",  "value": eq["vel_actual"]},
-            {"name": "ConsignaVelocidad",  "tagType": "AtomicTag", "valueType": "Float4",  "value": eq["vel_consigna"]},
-            {"name": "TemperaturaMotorC",  "tagType": "AtomicTag", "valueType": "Float4",  "value": 54.2},
-            {"name": "OrdenCierrePLC",     "tagType": "AtomicTag", "valueType": "Boolean", "value": False}
+            {"name": "EstadoMarcha",       "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Boolean", "value": True},
+            {"name": "ModoRemoto",         "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Boolean", "value": True},
+            {"name": "SetaEmergencia",     "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Boolean", "value": False},
+            {"name": "FalloTermico",       "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Boolean", "value": False},
+            {"name": "AlarmaScrapAlto",    "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Boolean", "value": False},
+            {"name": "LoteActivoID",       "tagType": "AtomicTag", "valueSource": "memory", "dataType": "String",  "value": eq["lote_inicial"]},
+            {"name": "UnidadesObjetivo",   "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Int4",    "value": eq["target"]},
+            {"name": "UnidadesBuenas",     "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Int4",    "value": eq["good"]},
+            {"name": "UnidadesScrap",      "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Int4",    "value": eq["scrap"]},
+            {"name": "TiempoOperativoMin", "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Float8",  "value": eq["op_min"]},
+            {"name": "TiempoCicloIdealSeg","tagType": "AtomicTag", "valueSource": "memory", "dataType": "Float8",  "value": eq["ciclo_ideal"]},
+            {"name": "VelocidadActual",    "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Float8",  "value": eq["vel_actual"]},
+            {"name": "ConsignaVelocidad",  "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Float8",  "value": eq["vel_consigna"]},
+            {"name": "TemperaturaMotorC",  "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Float8",  "value": 54.2},
+            {"name": "OrdenCierrePLC",     "tagType": "AtomicTag", "valueSource": "memory", "dataType": "Boolean", "value": False}
         ]
     })
+
+full_root_path = "{}{}".format(tag_provider, root_folder)
+if system.tag.exists(full_root_path):
+    system.tag.deleteTags([full_root_path])
 
 system.tag.configure(tag_provider, [{"name": root_folder, "tagType": "Folder", "tags": equipment_folders}], "o")
 print "Tags aprovisionados correctamente en [default]PLANTA_PRODUCCION/"
 ```
 
-##### Recurso Entregado 2: Script SQL de Poblado Inicial (`INSERT INTO`) para la Capa 1 (`SANDBOX_DB`)
+##### Recurso Entregado 2: Simulador de Telemetría Viva de Planta (`project.plant.simulator`)
+Crear en **Server Scripting -> Project Library** el paquete `plant` y dentro el módulo `simulator` (`project.plant.simulator`). Pegar y guardar (`Ctrl+S`) el siguiente código que simula los PLCs de campo mediante lectura/escritura masiva sin bucles (`readBlocking` / `writeBlocking`).
+*(Opcional: Puedes invocar `plant.simulator.step_simulation_tick()` desde un **Gateway Timer Script** cada `5000 ms`, desde la **Script Console** o desde el botón de pulso del dashboard en Perspective)*:
+
+```python
+"""
+Modulo: project.plant.simulator
+Descripcion: Recurso base entregado - Generador de telemetria industrial en tiempo real.
+             Ejecuta lectura y escritura masiva por lotes (Batch I/O) para simular
+             contadores de PLC, oscilacion de caudal/velocidad, temperatura y alarmas de merma.
+"""
+import math
+import random
+
+LOGGER = system.util.getLogger("SCADA.PlantSimulator")
+TAG_ROOT = "[default]PLANTA_PRODUCCION"
+MACHINES = ["EDAR_BOMBA_01", "EDAR_BOMBA_02", "EDAR_COMPRESOR_01", "LINEA_ENVASADO_01"]
+
+
+def step_simulation_tick(tick_index=1, increment_counters=True):
+    """
+    Ejecuta un ciclo de simulacion leyendo y escribiendo en bloque todos los equipos activos.
+    """
+    read_paths = []
+    for m in MACHINES:
+        base = "{}/{}".format(TAG_ROOT, m)
+        read_paths.extend([
+            base + "/EstadoMarcha",
+            base + "/SetaEmergencia",
+            base + "/ConsignaVelocidad",
+            base + "/UnidadesBuenas",
+            base + "/UnidadesScrap",
+            base + "/TiempoOperativoMin"
+        ])
+
+    # 1. Lectura masiva en 1 sola trama de red (24 tags en 1 llamada)
+    qvs = system.tag.readBlocking(read_paths, 3000)
+
+    write_paths = []
+    write_values = []
+    summary = {}
+
+    for idx, m in enumerate(MACHINES):
+        offset = idx * 6
+        is_running = bool(qvs[offset].value) if qvs[offset].quality.isGood() else False
+        is_estop = bool(qvs[offset + 1].value) if qvs[offset + 1].quality.isGood() else False
+        setpoint = float(qvs[offset + 2].value or 50.0)
+        good_cur = int(qvs[offset + 3].value or 0)
+        scrap_cur = int(qvs[offset + 4].value or 0)
+        op_min_cur = float(qvs[offset + 5].value or 0.0)
+
+        base = "{}/{}".format(TAG_ROOT, m)
+
+        if is_running and not is_estop:
+            wave = math.sin((tick_index + idx) * 0.65) * (setpoint * 0.025)
+            noise = random.uniform(-setpoint * 0.01, setpoint * 0.01)
+            vel_live = round(max(0.0, setpoint + wave + noise), 2)
+            temp_live = round(52.0 + (vel_live / max(setpoint, 1.0)) * 11.5 + random.uniform(-0.8, 0.8), 1)
+
+            new_good = good_cur + (random.randint(3, 12) if increment_counters else 0)
+            new_scrap = scrap_cur + (1 if (increment_counters and random.random() < 0.20) else 0)
+            new_op_min = round(op_min_cur + (0.1 if increment_counters else 0.0), 2)
+        else:
+            vel_live = 0.0
+            temp_live = 28.5
+            new_good = good_cur
+            new_scrap = scrap_cur
+            new_op_min = op_min_cur
+
+        total_u = new_good + new_scrap
+        scrap_high = ((float(new_scrap) / total_u) * 100.0 > 5.0) if total_u > 0 else False
+
+        write_paths.extend([
+            base + "/VelocidadActual",
+            base + "/TemperaturaMotorC",
+            base + "/UnidadesBuenas",
+            base + "/UnidadesScrap",
+            base + "/TiempoOperativoMin",
+            base + "/AlarmaScrapAlto"
+        ])
+        write_values.extend([vel_live, temp_live, new_good, new_scrap, new_op_min, scrap_high])
+
+        summary[m] = {
+            "vel": vel_live, "temp": temp_live,
+            "good": new_good, "scrap": new_scrap, "op_min": new_op_min
+        }
+
+    # 2. Escritura masiva atomica en 1 sola trama
+    system.tag.writeBlocking(write_paths, write_values, 3000)
+    return summary
+
+
+def reset_seed_counters_for_qa():
+    """
+    Restaura los valores exactos de semilla en EDAR_BOMBA_01 (4850 buenas, 65 scrap, 420.0 min)
+    para que las pruebas deterministas de QA coincidan al 100% tras haber ejecutado el simulador.
+    """
+    base = "{}/EDAR_BOMBA_01".format(TAG_ROOT)
+    paths = [
+        base + "/EstadoMarcha", base + "/ModoRemoto", base + "/SetaEmergencia", base + "/FalloTermico",
+        base + "/LoteActivoID", base + "/UnidadesObjetivo", base + "/UnidadesBuenas",
+        base + "/UnidadesScrap", base + "/TiempoOperativoMin", base + "/TiempoCicloIdealSeg",
+        base + "/OrdenCierrePLC"
+    ]
+    vals = [True, True, False, False, "LOT-2026-FINAL-01", 5000, 4850, 65, 420.0, 2.5, False]
+    system.tag.writeBlocking(paths, vals, 3000)
+    return True
+```
+
+##### Recurso Entregado 3: Script SQL de Poblado Inicial (`INSERT INTO`) para la Capa 1 (`SANDBOX_DB`)
 
 > [!WARNING]
 > **¡Atención! Las sentencias `CREATE TABLE` y `CREATE INDEX` NO se entregan hechas:**
-> Antes de poder ejecutar este script de inserción de datos en **Tools -> Database Query Browser** (conexión `SANDBOX_DB`), **deberás escribir y ejecutar tú mismo las sentencias DDL (`CREATE TABLE IF NOT EXISTS` y `CREATE INDEX IF NOT EXISTS`)** siguiendo las especificaciones del **Reto 1A** más abajo. Puedes apoyarte en las columnas y tipos de datos que observas en estos `INSERT INTO` para verificar que los nombres de tus columnas coinciden exactamente:
+> Antes de poder ejecutar este script de inserción de datos en **Tools -> Database Query Browser** (conexión `SANDBOX_DB`), **deberás escribir y ejecutar tú mismo las sentencias DDL (`CREATE TABLE IF NOT EXISTS` y `CREATE INDEX IF NOT EXISTS`)** siguiendo las especificaciones del **Reto 1** más abajo. Puedes apoyarte en las columnas y tipos de datos que observas en estos `INSERT INTO` para verificar que los nombres de tus columnas coinciden exactamente:
 
 ```sql
 -- =============================================================================
--- RECURSO ENTREGADO 2: SCRIPT COMPARTIBLE DE POBLADO (SOLO SENTENCIAS INSERT INTO)
+-- RECURSO ENTREGADO 3: SCRIPT COMPARTIBLE DE POBLADO (SOLO SENTENCIAS INSERT INTO)
 -- Requiere haber creado previamente las tablas:
 --   1. plant_machines
 --   2. production_batches
@@ -274,7 +387,7 @@ SELECT 'LINEA_ENVASADO_01', 'OPERACION: Ajuste de consigna de velocidad a 50.0 b
 WHERE NOT EXISTS (SELECT 1 FROM ins_Registre_Actuacions WHERE Equip = 'LINEA_ENVASADO_01');
 ```
 
-##### Recurso Entregado 3: Plantilla Canónica `templates.service_template` (Sesión 10 - Lab 10.2)
+##### Recurso Entregado 4: Plantilla Canónica `templates.service_template` (Sesión 10 - Lab 10.2)
 Guardar en **Server Scripting -> Project Library** bajo la ruta `templates.service_template`. Tu implementación del **Enfoque B** de la Capa 3 deberá importar y heredar de esta clase `BaseSCADAService`:
 
 ```python
@@ -348,26 +461,12 @@ class BaseSCADAService(object):
 #### 🛠️ Especificaciones del Reto por Capas (Lo que debe desarrollar e integrar el alumno)
 
 > [!IMPORTANT]
-> A partir de los 3 recursos base anteriores, debes implementar las siguientes capas cumpliendo los contratos de nombres, firmas y parámetros para que la batería de certificación QA valide tu proyecto al 100%.
+> A partir de los **4 recursos base entregados** arriba (los tags de campo, el simulador de telemetría `project.plant.simulator`, los `INSERT INTO` de semilla y la plantilla `templates.service_template`), debes implementar las siguientes capas cumpliendo los contratos de nombres, firmas y parámetros para que la batería de certificación QA valide tu proyecto al 100%.
 
 ---
 
-#### Reto 0: Simulador de Telemetría Viva en `Project Library` (`project.plant.simulator`)
-* **Objetivo:** Hacer que los tags de las 4 máquinas en `[default]PLANTA_PRODUCCION/<EQUIPO>/` cambien de valor simulando el proceso industrial sin cometer el anti-patrón de E/S en bucle.
-* **Requisitos de Implementación:**
-  1. Crear el script `plant.simulator` con la función `step_simulation_tick(tick_index=1, increment_counters=True)`.
-  2. Leer el estado de las 4 máquinas en **una única llamada `system.tag.readBlocking`**.
-  3. Para cada máquina con `EstadoMarcha == True` y `SetaEmergencia == False`:
-     * Hacer oscilar `VelocidadActual` alrededor de `ConsignaVelocidad` ($\pm 3\%$ con `math.sin` y `random.uniform`) y ajustar `TemperaturaMotorC`.
-     * Incrementar `UnidadesBuenas` (entre $+3$ y $+12$), ocasionalmente `UnidadesScrap` ($+1$), y `TiempoOperativoMin` ($+0.1$).
-     * Evaluar si el porcentaje de rechazo supera el $5.0\%$ y activar el tag booleano `AlarmaScrapAlto`.
-  4. Escribir todos los tags actualizados en **una única llamada `system.tag.writeBlocking`**.
-  5. Crear la función auxiliar `reset_seed_counters_for_qa()` que restaure en `EDAR_BOMBA_01` los valores exactos de semilla (`UnidadesBuenas = 4850`, `UnidadesScrap = 65`, `TiempoOperativoMin = 420.0`, `SetaEmergencia = False`, `ModoRemoto = True`, `LoteActivoID = 'LOT-2026-FINAL-01'`, `OrdenCierrePLC = False`).
-
----
-
-#### Reto 1A: Capa 1 — Escritura del Esquema Relacional SQL DDL (`CREATE TABLE` + `CREATE INDEX`) e Hidratación
-* **Objetivo:** Redactar y ejecutar por ti mismo en **Tools -> Database Query Browser** (`SANDBOX_DB`) las sentencias DDL idempotentes para crear las 3 tablas del proyecto y sus índices de rendimiento antes de lanzar los `INSERT INTO` del **Recurso Entregado 2**:
+#### Reto 1: Capa 1 — Escritura del Esquema Relacional SQL DDL (`CREATE TABLE` + `CREATE INDEX`) e Hidratación
+* **Objetivo:** Redactar y ejecutar por ti mismo en **Tools -> Database Query Browser** (`SANDBOX_DB`) las sentencias DDL idempotentes para crear las 3 tablas del proyecto y sus índices de rendimiento antes de lanzar los `INSERT INTO` del **Recurso Entregado 3**:
   1. **Tabla `plant_machines` (`CREATE TABLE IF NOT EXISTS`):**
      * `machine_id` (`VARCHAR(50)`, clave primaria `PRIMARY KEY`), `line_name` (`VARCHAR(60) NOT NULL`), `ideal_cycle_time_sec` (`DOUBLE PRECISION NOT NULL`), `nominal_setpoint` (`DOUBLE PRECISION NOT NULL DEFAULT 50.0`), `engineering_unit` (`VARCHAR(20) NOT NULL DEFAULT 'u/h'`), `is_active` (`BOOLEAN NOT NULL DEFAULT TRUE`).
      * *(Tip: Si la tabla ya existía de laboratorios previos sin las columnas `nominal_setpoint` o `engineering_unit`, añade `ALTER TABLE plant_machines ADD COLUMN IF NOT EXISTS ...`)*
@@ -379,11 +478,11 @@ class BaseSCADAService(object):
      * `idx_batches_shift_created` sobre `production_batches (shift_id, created_at)`.
      * `idx_batches_status_created` sobre `production_batches (status, created_at)`.
      * `idx_audit_equip_datahora` sobre `ins_Registre_Actuacions (Equip, DataHora DESC)`.
-  5. **Ejecución del Poblado:** Una vez creadas tus tablas e índices, ejecuta el bloque de sentencias `INSERT INTO` del **Recurso Entregado 2** y verifica que tienes 6 máquinas, 12 lotes (9 `'CLOSED'` y 3 `'IN_PROGRESS'`) y las trazas iniciales de auditoría.
+  5. **Ejecución del Poblado:** Una vez creadas tus tablas e índices, ejecuta el bloque de sentencias `INSERT INTO` del **Recurso Entregado 3** y verifica que tienes 6 máquinas, 12 lotes (9 `'CLOSED'` y 3 `'IN_PROGRESS'`) y las trazas iniciales de auditoría.
 
 ---
 
-#### Reto 1B: Capa 2 — Named Queries Parametrizadas (`Production/*`)
+#### Reto 2: Capa 2 — Named Queries Parametrizadas (`Production/*`)
 * **Objetivo:** Crear en **Named Queries** (carpeta `Production`, conexión `SANDBOX_DB`) 3 consultas con *Value Parameters*:
   1. **`Production/GetShiftSummary` (`Query`):**
      * *Parámetros:* `shiftId` (`Integer`), `startDate` (`DateTime`), `endDate` (`DateTime`).
@@ -397,7 +496,7 @@ class BaseSCADAService(object):
 
 ---
 
-#### Reto 2: Configuración de Seguridad RBAC (Enfoque A y Enfoque B) y Usuarios de Prueba en el Gateway Cloud
+#### Reto 3: Configuración de Seguridad RBAC (Enfoque A y Enfoque B) y Usuarios de Prueba en el Gateway Cloud
 * **Objetivo:** Configurar la seguridad en el **Gateway desplegado en el servidor en la nube** (`http://<IP-GATEWAY-CLOUD>:8088/`, ej. `http://35.204.54.113:8088/`) para validar el sistema con **4 perfiles de usuario distintos** y **2 enfoques de autorización**:
   1. **Usuarios en el Gateway Cloud (`Config -> Security -> Users, Roles`):**
      * `visita_auditor` (Rol: `PlantViewer` — Solo lectura)
@@ -411,7 +510,7 @@ class BaseSCADAService(object):
 
 ---
 
-#### Reto 3: Capa 3 — Servicio de Planta (`project.plant.service`) con Enfoque A, Enfoque B y los 5 Puntos de SCADA Real
+#### Reto 4: Capa 3 — Servicio de Planta (`project.plant.service`) con Enfoque A, Enfoque B y los 5 Puntos de SCADA Real
 * **Objetivo:** Implementar el módulo `plant.service` cumpliendo los siguientes bloques:
   1. **Funciones Puras (0% I/O):**
      * `calculate_batch_kpis(target_units, good_units, scrap_units, operating_min, ideal_cycle_sec)`:
@@ -432,11 +531,11 @@ class BaseSCADAService(object):
        * Soporta `rbac_mode="A"` (valida `user_roles`) y `rbac_mode="B"` (valida `security_levels` y `security_zones`). Si es rechazado, registra `WARN` en logger e inserta traza `SEGURIDAD [RBAC-...]` en `ins_Registre_Actuacions`.
        * **Punto 1 de SCADA Real:** Abre transacción ACID explícita (`system.db.beginTransaction(database=DB_CONN, timeout=5000)`), ejecuta `Production/CloseBatchWithAudit` e inserta en `ins_Registre_Actuacions` incluyendo el motivo de cierre (`close_reason`), ejecuta `commitTransaction` (o `rollbackTransaction` en `except` + `closeTransaction` en `finally`), y dispara el handshake PLC y la notificación asíncrona ERP.
      * **Enfoque B (`class PlantProductionService(BaseSCADAService)` + wrapper `finalize_batch_service_enfoque_b`):**
-       * Hereda de `templates.service_template.BaseSCADAService` (Recurso Entregado 3), delegando en `self.check_rbac_roles()`, `self.check_rbac_security_levels()`, `self.record_audit(..., tx=tx_id)` y `self.dispatch_acid_transaction(...)`.
+       * Hereda de `templates.service_template.BaseSCADAService` (**Recurso Entregado 4**), delegando en `self.check_rbac_roles()`, `self.check_rbac_security_levels()`, `self.record_audit(..., tx=tx_id)` y `self.dispatch_acid_transaction(...)`.
 
 ---
 
-#### Reto 4: Capa 4 — Dashboard en Perspective con Tags Vivos, Enfoque A/B y Message Handlers Reales (`Views/Laboratorios/Lab11_OEE_Dashboard`)
+#### Reto 5: Capa 4 — Dashboard en Perspective con Tags Vivos, Enfoque A/B y Message Handlers Reales (`Views/Laboratorios/Lab11_OEE_Dashboard`)
 * **Objetivo:** Construir el panel de supervisión y mando conectado en tiempo real a los tags del PLC y al bus de mensajería de Perspective:
   1. **Indirect Tag Bindings Polimórficos:** Configurar `view.custom.selectedEquip` y vincular en `root.custom` los tags de la máquina seleccionada (`[default]PLANTA_PRODUCCION/{1}/UnidadesBuenas`, `UnidadesScrap`, `VelocidadActual`, `ConsignaVelocidad`, `TemperaturaMotorC`, `EstadoMarcha`, `ModoRemoto`, `SetaEmergencia`, `LoteActivoID`).
   2. **Cálculo y Estilo de KPIs OEE (Implementar Ambos Enfoques):**
@@ -444,14 +543,14 @@ class BaseSCADAService(object):
      * *Enfoque B:* **Perspective Style Classes** (`OEE/Optimal` verde `>= 85%`, `OEE/Warning` naranja `>= 65%`, `OEE/Critical` rojo `< 65%`) vinculadas mediante un **Map Transform** numérico.
   3. **Selectores de Prueba y Firma Operativa con Motivo de Cierre (Punto 3 de SCADA Real):**
      * Añadir selectores para elegir equipo (`drop_Equipo`), usuario simulado (`drop_UsuarioPrueba`: `visita_auditor`, `operador_noche`, `laura.vidal`, `marti.sanchez`), modo RBAC (`"A"` o `"B"`), modo de servicio (`"A"` o `"B"`) y **motivo de cierre / firma operativa (`drop_MotivoCierre` o Popup Modal de confirmación en 2 pasos)**.
-     * Añadir el botón `"SIMULAR PULSO DE TELEMETRÍA PLC"` que invoque a `project.plant.simulator.step_simulation_tick()` y publique un mensaje en `notify_toast`.
+     * Añadir el botón `"SIMULAR PULSO DE TELEMETRÍA PLC"` que invoque al simulador entregado (`project.plant.simulator.step_simulation_tick()`) y publique un mensaje en `notify_toast`.
   4. **Configuración OBLIGATORIA de los 2 Message Handlers Receptores en `root` (`Configure Scripts... -> Message Handlers`):**
      * **`notify_toast` (Scopes: `Page`, `Session`):** Debe recoger el `payload` enviado por los botones (`msg`, `type`, `user`), formatear la marca de hora actual y cambiar dinámicamente el texto y el color de fondo del banner `lbl_BannerNotificacion` (verde en éxito, rojo en rechazo RBAC/error, azul en información).
      * **`OnBatchStatusChanged` (Scopes: `Page`, `Session`):** Debe recoger el evento tras cada intento de cierre y ejecutar `refreshBinding("props.data")` tanto sobre la tabla `tbl_ResumenTurno` (vinculada a `Production/GetShiftSummary`) como sobre la tabla `tbl_Auditoria` (vinculada a `ins_Registre_Actuacions`).
 
 ---
 
-#### Reto 5: Capa 5 — Automatización Desatendida en Gateway (CRON Idempotente + Vigilancia de Merma por Tag Change)
+#### Reto 6: Capa 5 — Automatización Desatendida en Gateway (CRON Idempotente + Vigilancia de Merma por Tag Change)
 * **Objetivo:** Configurar dos eventos automáticos en **Server Scripting -> Gateway Event Scripts**:
   1. **Scheduled Script (`ConsolidacionFinTurno` — CRON `0 0 6,14,22 * * ?`):**
      * Comprobar primero con `system.db.runScalarPrepQuery` cuántos lotes están en `'IN_PROGRESS'`. Si es `0`, registrar mensaje de idempotencia en el logger y terminar sin hacer escrituras.
@@ -462,7 +561,7 @@ class BaseSCADAService(object):
 
 ---
 
-#### Reto 6: Capa 6 — Suite de Certificación QA en `Project Library` y `Script Console` (Enfoque A + Enfoque B con `unittest`)
+#### Reto 7: Capa 6 — Suite de Certificación QA en `Project Library` y `Script Console` (Enfoque A + Enfoque B con `unittest`)
 * **Objetivo:** Auditar y certificar automáticamente todas las capas implementando **ambos enfoques de testing**:
   1. **Enfoque A (Suite Directa / `SCADATestSuite` en Consola):**
      * Validar los resultados exactos del motor OEE con los datos semilla (`quality == 98.68`, `performance == 48.76`, `oee == 48.12`), la lectura en bloque de tags reales, el rechazo RBAC a `operador_noche` y el cierre autorizado + idempotencia con `marti.sanchez`.
@@ -474,7 +573,7 @@ class BaseSCADAService(object):
        * `test_04_rbac_rechazo_multiples_usuarios_no_autorizados`: Rechazo verificado para `visita_auditor` (RBAC A), `operador_noche` (RBAC B) y para `laura.vidal` cuando intenta operar desde una `SecurityZone` externa no confiable (`Zona_WiFi_Externa_No_Confiable`).
        * `test_05_cierre_autorizado_e_idempotencia_enfoque_a_y_b`: Cierre exitoso en Enfoque A (`LOT-2026-FINAL-01` con `marti.sanchez`) y en Enfoque B (`LOT-2026-FINAL-02` con `laura.vidal`), comprobando que el segundo intento inmediato sobre ambos devuelve `False`.
        * `test_06_handshake_plc_reset_y_notificacion_erp_fallback`: Verificación de que el PLC queda con `OrdenCierrePLC == True`, `UnidadesBuenas == 0` y `LoteActivoID == 'LOT-2026-FINAL-01-NEXT'`, y que el cliente ERP activa `STORE_AND_FORWARD_FALLBACK` ante caída del servidor externo.
-     * Incluir una función `reset_test_batches_in_db()` en `setUpClass` y al finalizar el runner para que la batería sea **100% repetible en cualquier momento**.
+     * Incluir una función `reset_test_batches_in_db()` (apoyada en `plant.simulator.reset_seed_counters_for_qa()` entregado en el **Recurso Entregado 2**) en `setUpClass` y al finalizar el runner para que la batería sea **100% repetible en cualquier momento**.
 
 #### Resultado esperado
 
@@ -511,7 +610,7 @@ class BaseSCADAService(object):
 1. **Cero SQL Concatenado:** Utilizar exclusivamente Named Queries con *Value Parameters* (`:param`) o Prepared Statements con parámetros posicionales (`?`). Toda concatenación es una vulnerabilidad de inyección SQL.
 2. **Cero E/S en Bucles:** Agrupar lecturas y escrituras de tags en llamadas masivas por lote (`system.tag.readBlocking` y `system.tag.writeBlocking`). Prohibido llamar a tags dentro de bucles `for`.
 3. **Transforms Livianos y Estilos Nativos:** Los Script Transforms de Perspective deben limitarse a llamadas de 1-3 líneas a funciones puras, priorizando siempre **Expression Bindings**, **Map Transforms** y **Perspective Style Classes**. Cero llamadas a base de datos o lecturas de tags en transforms.
-4. **Transaccionalidad ACID y Captura Dual de Excepciones:** Agrupar escrituras críticas y sus pistas de auditoría bajo transacciones explícitas (`beginNamedQueryTransaction`, `commit`, `rollback`, `close` en `finally`) e interceptar tanto errores de Jython como `SQLException` y `JavaException`.
+4. **Transaccionalidad ACID y Captura Dual de Excepciones:** Agrupar escrituras críticas y sus pistas de auditoría bajo transacciones explícitas (`system.db.beginTransaction`, `commit`, `rollback`, `close` en `finally`) e interceptar tanto errores de Jython como `SQLException` y `JavaException`.
 5. **Logging Contextual Estructurado:** Erradicar por completo las sentencias `print` en Gateway y utilizar `system.util.getLogger` identificando módulo, máquina, acción y usuario.
 6. **Defensa en Profundidad (Security Zones + Levels + Backend RBAC):** Combinar la restricción por zonas de red y niveles de seguridad nativos de Ignition con la validación imperativa de roles en `Project Library`, auditando todo intento rechazado.
 7. **Idempotencia y Handshake Físico PLC ↔ SCADA:** Diseñar tareas CRON de forma que su reejecución no duplique cierres, y verificar siempre los enclavamientos físicos (`ModoRemoto`, `SetaEmergencia`, calidad `Good`) antes de transaccionar.
